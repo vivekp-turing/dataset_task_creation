@@ -1,0 +1,259 @@
+# taxonomy_v1 — [Public] taxonomy_v1 (English)
+# Source: docs/alibaba/[Public] taxonomy_v1 (English).pdf
+# For each category, multiple labels may apply. Orthogonality is approximate.
+
+version: "1.0"
+source: "[Public] taxonomy_v1 (English).pdf"
+
+# Distribution caps (Alibaba Coding Evals ask.md)
+max_tasks_per_combination: 100
+min_tasks_per_required_combination: 5  # ★★★ code_lang × task_type × application
+
+# ---------------------------------------------------------------------------
+# code_lang — programming language (field: language in task.toml)
+# ★★★ = required coverage dimension
+# ---------------------------------------------------------------------------
+code_lang:
+  required:
+    - go
+    - c
+    - c++
+    - python
+    - java
+    - js/ts
+    - php
+    - shell
+    - c#
+    - html/css
+    - sql
+    - rust
+  optional:
+    - kotlin
+    - swift
+    - ruby
+    - lua
+    - other
+    - mixed
+    - unknown
+
+# Legacy / sample10 aliases → official code_lang
+code_lang_aliases:
+  csharp: c#
+  "C#": c#
+  JavaScript: js/ts
+  TypeScript: js/ts
+  "JS/TS": js/ts
+  "C/C++": c++  # prefer c or c++ when known; use mixed if both significant
+
+# ---------------------------------------------------------------------------
+# task_type — second-level labels (field: task_type in task.toml)
+# Organized by top-level category from the taxonomy doc
+# ---------------------------------------------------------------------------
+task_type_categories:
+  Fix:
+    description: Correct erroneous behavior; restore correctness/stability
+    labels:
+      required: [bug-fix, compatibility-fix]
+      optional: [performance-fix]
+  Implementation:
+    description: Add or extend product capabilities
+    labels:
+      required: [feature]
+      optional: [enhancement, backward-compatibility, from_scratch]
+  "Testing & Quality":
+    description: Add/fix tests or improve quality gates
+    labels:
+      required: [test-add, coverage]
+      optional: [test-fix, debug-support]
+  "Refactoring & Maintenance":
+    description: Improve structure/maintainability with minimal external behavior change
+    labels:
+      required: [refactor]
+      optional: [style, deprecation]
+  "Build & Release":
+    description: Build, CI/CD, packaging, deployment, config
+    labels:
+      required: [build-fix, ci-fix]
+      optional: [deployment, packaging, config]
+  "Documentation & Design":
+    description: Documentation or design artifacts
+    labels:
+      optional: [user-docs, design-spec, diagram]
+  "Security & Compliance":
+    description: Security hardening or compliance
+    labels:
+      optional: [security-fix, auth, privacy]
+  Non_Coding:
+    description: Non-coding tasks (Q&A, planning, etc.)
+    labels:
+      optional: [non-coding]
+
+# Flat list of all valid task_type values (for validation)
+task_type:
+  - bug-fix
+  - performance-fix
+  - compatibility-fix
+  - feature
+  - enhancement
+  - backward-compatibility
+  - from_scratch
+  - test-add
+  - test-fix
+  - coverage
+  - debug-support
+  - refactor
+  - style
+  - deprecation
+  - build-fix
+  - ci-fix
+  - deployment
+  - packaging
+  - config
+  - user-docs
+  - design-spec
+  - diagram
+  - security-fix
+  - auth
+  - privacy
+  - non-coding
+
+# Required task_type labels for coverage (★★★)
+task_type_required:
+  - bug-fix
+  - compatibility-fix
+  - feature
+  - test-add
+  - coverage
+  - refactor
+  - build-fix
+  - ci-fix
+
+# Map task_type → rubric task_type key (docs/alibaba/rubrics_overall.yaml)
+task_type_to_rubric:
+  bug-fix: bug_fix
+  performance-fix: bug_fix
+  compatibility-fix: bug_fix
+  security-fix: bug_fix
+  feature: code_generation
+  enhancement: code_generation
+  backward-compatibility: code_generation
+  from_scratch: code_generation
+  test-add: code_generation
+  test-fix: bug_fix
+  coverage: code_generation
+  debug-support: code_generation
+  refactor: refactor
+  style: refactor
+  deprecation: refactor
+  build-fix: bug_fix
+  ci-fix: bug_fix
+  deployment: code_generation
+  packaging: code_generation
+  config: code_generation
+  user-docs: code_qa
+  design-spec: code_qa
+  diagram: code_qa
+  auth: code_generation
+  privacy: code_generation
+  non-coding: code_qa
+
+# ---------------------------------------------------------------------------
+# application — first-level domain (field: domain in task.toml)
+# ---------------------------------------------------------------------------
+application:
+  required:
+    - Client_UI
+    - Backend_Infrastructure
+    - AI_ML
+    - Database_Storage
+    - Business_Domain_Logic
+  optional:
+    - Graphics_Media
+    - Embedded_Systems
+    - Operating_System
+    - Scientific_Computing
+    - Other
+
+application_descriptions:
+  Client_UI: "User-facing interface, web/mobile/desktop GUI"
+  Backend_Infrastructure: "Server-side APIs, business logic layer, CI/CD, cloud, observability"
+  AI_ML: "ML model development, data pipelines, MLOps, NLP/CV/RL"
+  Database_Storage: "Schema design, query optimization, persistence, warehousing"
+  Business_Domain_Logic: "Pure business rules, workflows, state machines, domain algorithms"
+  Graphics_Media: "Games, rendering, multimedia, AR/VR"
+  Embedded_Systems: "Firmware, IoT, RTOS, device drivers"
+  Operating_System: "Kernel, syscalls, memory management, virtualization"
+  Scientific_Computing: "Numerical analysis, HPC, simulations"
+  Other: "Multi-domain or unclear primary focus"
+
+# Legacy sample10 domain names → official application
+application_aliases:
+  Backend: Backend_Infrastructure
+  "Business logic": Business_Domain_Logic
+  Database: Database_Storage
+  "Client UI": Client_UI
+  DevOps: Backend_Infrastructure
+  Security: Backend_Infrastructure
+  Infrastructure: Backend_Infrastructure
+  Testing: Backend_Infrastructure
+
+# ---------------------------------------------------------------------------
+# Other metadata dimensions (from taxonomy doc)
+# ---------------------------------------------------------------------------
+other_dimensions:
+  difficulty:
+    description: "How difficult the problem is"
+  user_spec:
+    description: "User specification is specific or adhoc"
+  verifiable:
+    description: "Whether the task outcome is objectively verifiable"
+
+# High-priority evaluation dimensions (Alibaba Coding Evals ask.md — task.toml [alibaba])
+high_priority_dimensions:
+  long_horizon:
+    description: "Agent may need 3h+ continuous work to solve"
+    agent_timeout_sec: 10800
+  must_follow_claude_md:
+    description: "Task strongly requires compliance with claude.md / project rules"
+  requires_web_search:
+    description: "Task requires web search to look up docs and codebases"
+  requires_multi_turn_user:
+    description: "Progressive user requirements, modifications to earlier requirements"
+  requires_subagents:
+    description: "Subagents required to complete subtasks (required for final acceptance)"
+  requires_skills:
+    description: "Task requires the use of skills"
+  requires_context_management:
+    description: "Task requires context management for context compression"
+  requires_mcp:
+    description: "Task requires the use of MCP"
+  requires_custom_tools:
+    description: "Task requires custom tools"
+  requires_coding_conventions:
+    description: "Task requires adherence to coding conventions implicit in the codebase"
+
+# SWE spec header Type → default Alibaba task_type
+swe_to_alibaba:
+  "feature implementation": { task_type: feature, application_hint: Business_Domain_Logic }
+  "bug-fix": { task_type: bug-fix }
+  "bug-fix + small feature": { task_type: bug-fix }
+  refactor: { task_type: refactor }
+
+# Language group (seed-repo-selection sheet) → code_lang
+language_groups:
+  "JS/TS": js/ts
+  JavaScript: js/ts
+  TypeScript: js/ts
+  Python: python
+  Java: java
+  "C#": c#
+  Go: go
+  Rust: rust
+  Ruby: ruby
+  PHP: php
+  C: c
+  "C++": c++
+  "C/C++": c++
+
+# Coverage combination key: code_lang × task_type × application (use required sets for planning)
+coverage_key_format: "{code_lang} × {task_type} × {application}"

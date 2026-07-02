@@ -1,9 +1,10 @@
 # Difficulty playbook — making a task hard on purpose
 
-The "Difficult" band = **frontier (Opus, GPT-5.5) and OSS models solve
-< 50%**. A task is not hard because the repo is big or the patch is long. It is hard
-because **correctness requires reasoning a strong model tends to get partially
-wrong.** Use these levers.
+The **Alibaba Hard** band = **claude-opus-4.6 pass rate ≤ 60%**, with **≥ 20% gap**
+vs both qwen-3.7-max and claude-sonnet-4.6, and **≥ 20 agent turns** on average.
+A task is not hard because the repo is big or the patch is long. It is hard because
+**correctness requires reasoning a strong model tends to get partially wrong.** Use
+these levers.
 
 ## The self-test (apply to every candidate)
 

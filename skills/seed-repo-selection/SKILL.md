@@ -23,6 +23,9 @@ tasks (per the task spec) from them. Output is a deduped CSV: one row per repo.
 - The sheet's tasks are reference only. The CSV keeps `example_instance_id` /
   `example_pr_url` purely as evidence the repo yields suitable work — the user
   must build new tasks, not reuse those PRs.
+- **Taxonomy coverage**: spread selections across `code_lang × task_type × application`
+  (≤100 tasks per combination; ≥5 per ★★★ combination per taxonomy doc). See
+  [`docs/alibaba/taxonomy_v1.yaml`](../../docs/alibaba/taxonomy_v1.yaml).
 - Counts and language coverage are **inputs**, never hardcoded.
 
 ## Quick start
@@ -78,6 +81,9 @@ Quality gate (all tunable via flags):
 Ranking score: closeness to the `instance_loc` sweet spot, higher difficulty,
 popularity (capped), test coverage, plus a **bug-fix bonus** so the shortlist
 keeps a feature/bug-fix mix. Then dedupe to one repo each.
+
+When reporting picks, note taxonomy coverage gaps (which `code_lang × task_type ×
+application` combos still need tasks).
 
 ## Tuning thresholds
 

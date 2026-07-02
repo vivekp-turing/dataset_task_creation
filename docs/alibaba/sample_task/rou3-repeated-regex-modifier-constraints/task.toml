@@ -1,0 +1,46 @@
+version = "1.0"
+
+[task]
+name = "rou3-repeated-regex-modifier-constraints"
+authors = []
+keywords = ["alibaba-sample", "js/ts", "compatibility-fix", "backend"]
+
+[metadata]
+author_name = "Sample Generator"
+author_email = "tasks@example.com"
+difficulty = "hard-candidate"
+category = "compatibility-fix"
+tags = ["js/ts", "compatibility-fix", "Backend"]
+repo = "h3js/rou3"
+base_commit = "f6a5b4deb14ebd73a46b5411835b002781f633cf"
+language = "js/ts"
+task_type = "compatibility-fix"
+domain = "Backend"
+
+[alibaba]
+status = "sample_needs_real_model_runs"
+one_sentence_description = "Repeated route parameters with inline regular expression constraints should keep those constraints after modifier expansion."
+why_worth_using = "Router grammar behavior spans parser, compiled matcher, and find-all paths with plausible partial fixes."
+long_horizon = true
+must_follow_claude_md = false
+requires_subagents = true
+requires_web_search = false
+requires_multi_turn_user = false
+requires_skills = false
+requires_context_management = false
+requires_mcp = false
+requires_custom_tools = false
+
+[verifier]
+timeout_sec = 1800.0
+
+[agent]
+timeout_sec = 10800.0
+
+[environment]
+build_timeout_sec = 1800.0
+cpus = 2
+memory_mb = 4096
+storage_mb = 10240
+gpus = 0
+allow_internet = false

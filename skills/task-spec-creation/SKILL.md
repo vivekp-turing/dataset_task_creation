@@ -5,9 +5,10 @@ description: >-
   high-quality, deliberately HARD, original task spec written as task_spec.md in
   that repo's folder. Picks the single best task surface per repo that meets every
   requirement in the task spec (~100 LoC multi-file gold patch, fail2pass + pass2pass
-  offline tests, <100MB git image, harbor format), is NOVEL/original (not a public
-  GitHub issue or famous CVE), realistic, and hard enough that frontier models
-  (Opus, GPT-5.5) solve it <50% of the time. Each spec covers: the task, why it's
+  offline tests, workspace.tar.gz env, Alibaba Harbor format), is NOVEL/original
+  (not a public GitHub issue or famous CVE), realistic, and hard enough that
+  claude-opus-4.6 passes ≤60% with ≥20% gap vs qwen-3.7-max and claude-sonnet-4.6.
+  Each spec covers: taxonomy tags, Alibaba meta, rubric seeds, the task, why it's
   hard, golden-patch feasibility + how to build it, and concrete fail2pass tests,
   plus a non-leaking problem-statement draft. Use after seed-repo-
   exploration when asked to pick a task idea per repo, write task specs, or design
@@ -31,10 +32,9 @@ it genuinely hard, and writes a buildable spec.
 - **One `task_spec.md` per repo**, written into the same `tasks/<slug>/` folder that
   holds that repo's `repo_summary.md`. Do not invent new folders.
 - **Pick exactly one** task idea per repo — the best/hardest viable one — not a list.
-- **Hard by design.** The aim is the "Difficult" band: frontier and OSS
-  models solve <50%. If *you* can solve it trivially in one shot, it's too easy —
-  push deeper (more interacting subsystems, exact-spec correctness, non-local
-  invariants). See `difficulty_playbook.md`.
+- **Hard by design.** The aim is the Alibaba Hard band: claude-opus-4.6 pass ≤60%,
+  ≥20% gap vs qwen and sonnet, ≥20 agent turns. If *you* can solve it trivially in
+  one shot, it's too easy — push deeper. See `difficulty_playbook.md`.
 - **Original & novel (the task spec requires NEW tasks).** Never reproduce or derive
   from a known public GitHub issue, PR, changelog entry, or famous CVE. Two failure
   modes to avoid: (a) **leakage** — a public issue+fix is likely in training data, so
@@ -59,14 +59,15 @@ it genuinely hard, and writes a buildable spec.
 (Read the source spec PDF if available — e.g. `.../SWE-Bench-task-spec.pdf` — to
 confirm; these are the load-bearing ones.)
 
-- **Harbor format**, with a **separate gold patch in a `solution/` folder**.
-- **~100 LoC patch** that **edits multiple files**; feature implementation OR bug fix.
-- **fail2pass tests** (fail on the unpatched repo, pass with the gold patch) **plus
-  pass2pass** regression; **no internet** at test time; offline Docker build.
-- **<100 MB git image**, no future commits/reflog/remote.
-- **Difficulty target:** ~50% Medium / 50% Hard overall — but this skill deliberately
-  authors toward **Hard** (each spec states its target). Tasks that turn out easy in
-  eval become the Medium half; the rest stay Hard.
+- **Alibaba Harbor format** — see [`docs/alibaba/README.md`](../../docs/alibaba/README.md).
+- **~100 LoC patch** across multiple files; feature implementation OR bug fix.
+- **fail2pass + pass2pass** tests; **no internet** at grade time; `workspace.tar.gz` env.
+- **Taxonomy tags** from [`docs/alibaba/taxonomy_v1.yaml`](../../docs/alibaba/taxonomy_v1.yaml)
+  (`code_lang`, `task_type`, `application`).
+- **Rubric seeds** whose correctness points mirror the exec verifier (Alibaba gate).
+- **Alibaba meta**: one-sentence description, why worth evaluating, author self-assessment.
+- **High-priority dimension flags** — only when genuinely required.
+- **Difficulty target:** author toward **Hard** (opus ≤60%); design for model discrimination.
 - **Problem statement** discusses the problem, not the implementation; no hidden-test
   leakage; no explicit "relevant files" lists.
 
@@ -151,31 +152,18 @@ hard/golden/tests sections.
 Fixed structure (see [task_spec_template.md](task_spec_template.md)). Non-negotiable
 sections:
 
-1. **Title + header block** — task title; **difficulty target** (Hard/Medium); type
-   (feature / bug-fix); **originality pattern** (net-new feature / real edge-case gap
-   / seeded regression) with a one-line note proving it against source (e.g. "grep
-   confirms no `X` at SHA …"); patch-size estimate (~100 LoC, N files); offline
-   (yes + how).
-2. **One-line** — the task in a single sentence.
-3. **Problem domain & current behavior** — what the subsystem does and what's wrong/
-   missing, grounded in real files (this is design context, not the user-facing
-   statement).
-4. **Why it is hard (deliberately)** — 4-6 numbered reasons: interacting subsystems,
-   exact-spec correctness, non-local invariants, state/lifecycle, adversarial test
-   matrix, contamination control. State honestly that it's author-level hard.
-5. **Golden patch — feasibility & approach** — confirm it's buildable; name the
-   oracle; list the files to change and the nature of the change; note it lives in
-   `solution/`.
-6. **fail2pass test strategy** — a **primary** fail2pass (exact assertions), edge
-   cases, optional model-based/property tests, and a **pass2pass** regression; all
-   deterministic + offline; give the smallest run command.
-7. **Files touched (estimate)** — bullet list with per-file LoC estimate summing to
-   ~100.
-8. **Harbor / image notes** — SDK/runtime version, restore/pre-cache, submodules,
-   pin SHA/tag, smallest verify command, base image; reaffirm <100MB + offline.
-9. **Problem statement draft (non-leaking)** — the user-facing problem text:
-   behavior only, no files, no tests, no implementation. End with a one-line note
-   confirming it doesn't leak.
+1. **Title + header block** — difficulty target (Hard/Medium), type, originality,
+   patch size, offline.
+2. **Taxonomy (Alibaba)** — `code_lang`, `task_type`, `application`, high-priority
+   dimension booleans with justifications.
+3. **Alibaba meta** — one-sentence description, why worth evaluating, author
+   self-assessment placeholders.
+4. **One-line**, **Problem domain**, **Why it is hard** (include model discrimination).
+5. **Golden patch — feasibility & approach** — oracle, files, lives in `solution/solve.sh`.
+6. **fail2pass test strategy** — primary, edges, pass2pass, run command.
+7. **Rubric seeds** — correctness/reasoning/tool_usage points mirroring the verifier.
+8. **Files touched**, **Harbor / image notes** (`workspace.tar.gz`, agent timeout).
+9. **Problem statement draft (non-leaking)** — becomes `instruction.md` + query JSON.
 
 ## Quality bar (what makes a spec good)
 

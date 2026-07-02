@@ -1,0 +1,16 @@
+{
+  "status": "NEEDS_REAL_MODEL_RUNS",
+  "note": "Sample package only. Run the fixed Alibaba agent setup for five attempts per model before marking accepted.",
+  "required_models": [
+    "claude-opus-4.6",
+    "claude-sonnet-4.6",
+    "qwen-3.7-max",
+    "glm-5.1"
+  ],
+  "fixed_agent_setup": {
+    "agent": "TO_BE_CONFIRMED_WITH_CLIENT",
+    "subagents": "required for Alibaba final acceptance; exact setup pending pilot",
+    "same_tools_for_all_models": true
+  },
+  "models": {}
+}

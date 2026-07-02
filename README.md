@@ -1,154 +1,129 @@
-# SWE Task Generation
+# Alibaba Coding Evals — Task Generation
 
 This repo holds the skills and source data used to turn **seed repositories** into
-**hard, original SWE agent tasks** in Harbor format. It captures the
-end-to-end pipeline: pick the right repos, build a deep mental model of each, ideate
-task surfaces, write a per-repo spec, build the Harbor task, then iterate with evals,
-hardening, and human QA until each task is genuinely hard, fair, and shippable.
+**hard, original agent tasks** for the **Alibaba Coding Evals** benchmark in Harbor
+format. It captures the end-to-end pipeline: pick repos, explore them, write specs,
+build the Harbor bundle (query + env + exec verifier + rubrics + metadata), run model
+pilots, score trajectories, and iterate until each task meets the acceptance bar.
 
-The goal of every task is the **"Difficult"** band: a ~100-LoC, multi-file gold patch
-(feature implementation or bug fix), deterministic offline `fail2pass` + `pass2pass`
-tests, a `<100 MB` git image with an offline Docker build, and an original problem
-(not derived from a public issue/PR/CVE) that frontier and OSS models solve `<50%` of
-the time.
+The goal of every task is a **discriminative, hard** evaluation item: a ~100-LoC
+multi-file gold patch, deterministic offline `fail2pass` + `pass2pass` exec verifier,
+packaged `workspace.tar.gz` environment, rubrics aligned with the verifier, and
+model trajectories that expose weaknesses relative to GLM and Claude.
+
+## Acceptance criteria (Alibaba)
+
+| Criterion | Target |
+|-----------|--------|
+| claude-opus-4.6 pass rate | ≤ 60% |
+| qwen-3.7-max vs opus gap | ≥ 20% |
+| claude-sonnet-4.6 vs opus gap | ≥ 20% |
+| Average agent turns | ≥ 20 |
+| Failure mode | Task-hardness, not environment failures |
+| Grading | Exec-based verifier only; rubric correctness must not conflict with verifier |
+| Distribution | ≤ 100 tasks per `code_lang × task_type × application`; ≥ 5 per ★★★ combo |
+
+Required model trajectories (5 attempts each): `claude-opus-4.6`, `claude-sonnet-4.6`,
+`qwen-3.7-max`, `glm-5.1`. Subagents are required for final acceptance.
+
+Reference docs: [`docs/alibaba/`](docs/alibaba/) · Requirements: [`Alibaba Coding Evals ask.md`](Alibaba%20Coding%20Evals%20ask.md)
 
 ## Workflow
 
 ```mermaid
 flowchart TD
-    A[seed repos] --> B[SWE metadata sheet<br/>select by LoC, language,<br/>difficulty, code type]
+    A[seed repos] --> B[SWE metadata sheet<br/>select by LoC, language,<br/>taxonomy coverage]
     B --> C[exploration of repos]
     C <--> D[initial set of task ideas]
-    D --> E[task spec creation<br/>spec of task requirements]
-    E --> F[create tasks in Harbor format]
-    F --> G
-
-    subgraph loop1 [Iterate x times]
-        G[run evals at k=2<br/>summary table +<br/>trajectory / failure-mode analysis] --> H[modification ideas /<br/>hardening]
-    end
-
-    H --> I
-
-    subgraph loop2 [Iterate x times]
-        I[human QA<br/>verifier quality + task instructions] --> J[run evals at pass@k]
-    end
+    D --> E[task spec creation<br/>spec + taxonomy + rubric seeds]
+    E --> F[build Alibaba Harbor bundle]
+    F --> G[rubric authoring]
+    G --> H[model pilot runs]
+    H --> I{acceptance gate}
+    I -->|fail| J[harden task]
+    J --> F
+    I -->|pass| K[ship bundle]
 ```
 
-Each phase below maps to a step in that diagram. Phases 1–3 are automated by the
-skills in this repo; phases 4–6 are described as process steps (the eval steps are
-kept high-level on purpose — they run on Harbor's eval harness).
+Phases 1–3 and 5–7 are skill-driven. Phase 4 (Harbor build) and Phase 6 (eval runs)
+use the skills in this repo; exact Harbor eval commands run on the client's eval harness.
 
 ---
 
 ### Phase 1 — Select seed repos  ·  skill: [`seed-repo-selection`](skills/seed-repo-selection/)
 
 Start from the SWE metadata sheet
-(`Turing SWEBench Public Dataset (Long-Range Tasks only, n=2551).xlsx`, included here)
-and select **distinct, high-quality repositories** — not the sheet's existing tasks —
-to author *original* tasks from.
+(`Turing SWEBench Public Dataset (Long-Range Tasks only, n=2551).xlsx`) and select
+**distinct, high-quality repositories** to author *original* tasks from.
 
-The skill (`skills/seed-repo-selection/scripts/select_seed_repos.py`) filters and ranks rows
-against the task requirements and writes a deduped CSV (one row per repo):
-
-- **Metadata used** (mirrors the diagram): per-task patch size (`instance_loc`),
-  total repo size (`loc`), `language`, `difficulty_score`, `code_type_primary`
-  (feature / bug-fix / refactor), `f2p_count` / `p2p_count`, `stars`.
-- **Quality gate** (all tunable): `instance_loc` in a ~100-LoC band, `f2p_count >= 3`,
-  `stars >= 250`, sane repo size (drops the unknown/huge sentinel) so the image stays
-  small, and code type in {feature, bug-fix, refactor}.
-- **Coverage**: pick N repos per language group (e.g. `JS/TS, Python, Java, C#`),
-  with a bug-fix/feature mix preserved by the ranking score.
-
-**Output:** `seed_repos.csv` — the candidate repos that feed exploration.
+- Quality gates: ~100-LoC patch band, `f2p_count >= 3`, `stars >= 250`, offline-safe repo size.
+- **Taxonomy coverage**: spread picks across `code_lang × task_type × application` (≤ 100 per combo).
+- **Output:** `seed_repos.csv`
 
 ### Phase 2 — Explore repos & ideate task surfaces  ·  skill: [`seed-repo-exploration`](skills/seed-repo-exploration/)
 
-For each selected repo, shallow-clone it and run one **read-only exploration
-subagent** (in parallel batches) that returns a dense `repo_summary.md`. The summary
-is task-authoring intelligence, not docs:
+Deep-readonly exploration per repo → `repo_summary.md` with mental model, offline
+notes, and 8–14 file-cited "Good Surfaces for Original Tasks".
 
-- overview, build/test/tooling, architecture, and a real **mental model** (type
-  hierarchy, module graph, end-to-end pipeline) — every claim cites a real file path;
-- **Testing** + **Offline / Containerization Notes** — which test layers are
-  offline-safe (unit) vs need network/display/GPU/live services (the offline gate);
-- **"Good Surfaces for Original Tasks"** — 8–14 file-cited candidate task ideas, each
-  marked feature vs bug-fix and offline-safe vs not, with a ~100-LoC change sketch.
+Consider Alibaba high-priority dimensions when surfacing ideas (long-horizon, subagents,
+web search, multi-turn user, claude.md compliance, etc.).
 
-This is the **exploration ⇄ initial task ideas** loop in the diagram: the "Good
-Surfaces" section *is* the initial set of task ideas, and thin or incomplete summaries
-are re-explored until each repo has a solid summary plus viable surfaces.
-
-**Output:** `tasks/<repo-slug>/repo_summary.md` per repo.
+**Output:** `tasks/<repo-slug>/repo_summary.md`
 
 ### Phase 3 — Write the task spec  ·  skill: [`task-spec-creation`](skills/task-spec-creation/)
 
-Turn each explored repo into **one** `task_spec.md` describing the single strongest,
-deliberately **hard, original** task to build from it — the "spec of task
-requirements" in the diagram. This is the contract the later Harbor build is written
-against.
+One `task_spec.md` per repo — the contract for Harbor build + rubric authoring.
 
-- **Pick exactly one surface** per repo — the hardest viable one — from the repo's
-  "Good Surfaces", then confirm it against the actual cloned source.
-- **Prove originality** against the pinned SHA and classify the task as one of:
-  net-new feature, real edge-case gap, or (last resort) seeded regression — so it is
-  not derived from a public issue/PR/CVE and the gap/bug is genuinely real in the
-  snapshot.
-- **Confirm buildability**: a ~100-LoC multi-file gold patch is feasible, there's an
-  exact correctness oracle, and deterministic offline `fail2pass` + `pass2pass` tests
-  can be written.
-- **Don't leak**: the problem-statement draft describes behavior only — no file
-  lists, no test names, no implementation steps.
+Includes: taxonomy tags, Alibaba meta (one-sentence description, why worth evaluating,
+author self-assessment), rubric seeds (correctness points mirroring the future verifier),
+and high-priority dimension flags.
 
-The skill ships a `difficulty_playbook.md` (levers + ranked "hard archetypes" + a
-self-test for "is this actually hard?") and a `task_spec_template.md` for the exact
-output shape.
+**Output:** `tasks/<repo-slug>/task_spec.md`
 
-**Output:** `tasks/<repo-slug>/task_spec.md` per repo (alongside `repo_summary.md`).
+### Phase 4 — Build the Alibaba Harbor bundle  ·  skill: [`alibaba-harbor-task-build`](skills/alibaba-harbor-task-build/)
 
-### Phase 4 — Build the task in Harbor format
+Convert each spec into a complete ship bundle:
 
-Implement each `task_spec.md` as a complete Harbor task. A task is hard and
-demanding (>1h agent runtime, high token use), and the instruction must **not**
-leak the verifier. Typical layout:
+```
+deliverables/<slug>/
+  test/<slug>.json
+  test-assets/<slug>/
+    instruction.md, task.toml, environment/, tests/, solution/
+    rubric.md, metadata/, runs/, scoring/
+```
 
-- `instruction.md` — the behavior-focused, slightly underspecified problem statement;
-- `task.toml` — task metadata/config;
-- `environment/` — the repo snapshot at the pinned SHA (plus a seeded regression, if
-  that originality pattern is used);
-- `solution/` — the ~100-LoC multi-file gold patch, kept separate from the task;
-- `tests/` — the verifiers: deterministic `outcome_tests`, an LLM `outcome_judge` on
-  the deliverable, and an LLM `process_judge` on the trajectory, composited into a
-  final reward.
+- **Query:** `test/<slug>.json` with `description` == `instruction.md`
+- **Env:** `environment/workspace.tar.gz` + Dockerfile (no git-fetch at grade time)
+- **Verifier:** exec-based `tests/test.sh` with embedded fail2pass patch; writes `0/1` reward
+- **Ground truth:** `solution/solve.sh` with embedded gold patch
+- **No LLM judges** — grading is deterministic exec only
 
-**Output:** one Harbor task folder per repo.
+**Output:** one bundle per repo under `deliverables/`
 
-### Phase 5 — Eval & harden  ·  *iterate ×N*
+### Phase 5 — Rubric authoring  ·  skill: [`alibaba-rubric-authoring`](skills/alibaba-rubric-authoring/)
 
-Run **Harbor evals** on each built task (a low `k`, e.g. `k=2`, is enough to get
-signal) and review the results, then deepen and tighten the task. No eval commands are
-documented here — the tasks are run on Harbor's eval harness.
+Generate or refine `rubric.md` from the overall rubric spec + per-task criteria.
+**Hard gate:** correctness rubric items must be logically equivalent to the exec verifier
+(no extra requirements, no weaker bar).
 
-- Produce an **eval summary table** across trials (reward, pass rate, time, tokens).
-- Do **trajectory + failure-mode analysis**: segment exploration vs execution, run
-  root-cause analysis on agent-attributable failures, and aggregate them into a
-  ranked failure taxonomy.
-- Feed that into **modification / hardening**: underspecify the instruction, force
-  more exploration, and tighten the deterministic tests so leading models score low
-  (target a low mean deterministic reward) while the task stays fair and solvable.
+**Output:** finalized `rubric.md` + `scoring/scoring_summary.json` scaffold
 
-Repeat until the task is genuinely hard, realistic, and still solvable.
+### Phase 6 — Model pilot runs & scoring  ·  skill: [`alibaba-eval-acceptance`](skills/alibaba-eval-acceptance/)
 
-### Phase 6 — Human QA & pass@k  ·  *iterate ×N*
+Run the fixed agent setup (claudecode + subagents, same tools for all models) at
+5 attempts per required model. Record trajectories, turn counts, pass/fail, and tag
+environment failures separately from task-hardness failures.
 
-Final human-in-the-loop gate before a task ships:
+Dual-reviewer rubric scoring → `scoring/scoring_summary.json` with agreement score.
 
-- **QA by a human** on **verifier quality** (no false positives/negatives; the gold
-  patch passes, plausible-but-wrong solutions fail) and **task instructions** (clear,
-  non-leaking, behavior-focused, solvable).
-- **Run Harbor evals at `pass@k`** to confirm the task behaves as intended at higher
-  sampling.
+**Output:** `runs/model_runs.json`, updated scoring summary
 
-Iterate on QA findings until the task is clean and shippable.
+### Phase 7 — Acceptance gate & hardening  ·  *iterate ×N*
+
+Check all acceptance criteria. If the task is too easy, too hard (env failures), or
+poorly discriminating, harden via spec/build changes and re-run pilots.
+
+Human QA on verifier quality (gold passes, plausible-wrong fails) and instruction clarity.
 
 ---
 
@@ -156,11 +131,14 @@ Iterate on QA findings until the task is clean and shippable.
 
 | Path | What it is |
 |------|------------|
-| `skills/seed-repo-selection/` | Skill — select & rank seed repos from the metadata sheet into a CSV. |
-| `skills/seed-repo-exploration/` | Skill — deep-explore each repo into a `repo_summary.md` with task surfaces. |
-| `skills/task-spec-creation/` | Skill — pick one hard, original surface per repo and write `task_spec.md`. |
-| `Turing SWEBench Public Dataset (Long-Range Tasks only, n=2551).xlsx` | Source metadata sheet that Phase 1 reads. |
+| `docs/alibaba/` | Reference Harbor case, sample task, rubrics, taxonomy |
+| `skills/seed-repo-selection/` | Select & rank seed repos from metadata sheet |
+| `skills/seed-repo-exploration/` | Deep-explore repos into `repo_summary.md` |
+| `skills/task-spec-creation/` | Write `task_spec.md` with taxonomy + rubric seeds |
+| `skills/alibaba-harbor-task-build/` | Build full Alibaba Harbor bundle from spec |
+| `skills/alibaba-rubric-authoring/` | Author rubrics aligned with exec verifier |
+| `skills/alibaba-eval-acceptance/` | Model pilots, scoring, acceptance checklist |
+| `Alibaba Coding Evals ask.md` | Full requirements and rubric spec |
+| `Turing SWEBench Public Dataset (...).xlsx` | Source metadata for Phase 1 |
 
-Each skill is a self-contained folder with a `SKILL.md` (plus templates/briefs/scripts).
-They are explicitly invoked — run them in order: **selection → exploration → spec
-creation** — then continue with the Harbor build, eval/hardening, and QA phases above.
+Run skills in order: **selection → exploration → spec → Harbor build → rubric → eval → acceptance**.

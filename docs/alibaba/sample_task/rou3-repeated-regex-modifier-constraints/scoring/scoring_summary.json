@@ -1,0 +1,6 @@
+{
+  "status": "NEEDS_SECOND_SCORING",
+  "rubric_test_alignment": true,
+  "scorer_agreement": null,
+  "note": "Sample package only. Fill after real model trajectories are scored by two reviewers."
+}

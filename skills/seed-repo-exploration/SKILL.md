@@ -5,11 +5,13 @@ description: >-
   repo_summary.md per repo — overview, build/test/tooling, architecture, a
   hierarchical mental model, key implementation files, testing + OFFLINE
   containerization notes, and concrete "Good Surfaces for Original Tasks" tailored
-  to the task requirements (~100 LoC multi-file patches, fail2pass tests,
-  <100MB git image + offline Docker build). Use after picking seed repos (e.g. from
-  seed-repo-selection / seed_repos_60.csv) when asked to explore repos
-  deeply, build a mental model, summarize a repo for task authoring, or set up a
-  tasks/ folder with one summary per repo. Runs the exploration in parallel.
+  to Alibaba task requirements (~100 LoC multi-file patches, fail2pass tests,
+  workspace.tar.gz env + offline Docker build). Flag surfaces that could target
+  Alibaba high-priority dimensions (long-horizon, subagents, web search, etc.). Use
+  after picking seed repos (e.g. from seed-repo-selection / seed_repos.csv) when
+  asked to explore repos deeply, build a mental model, summarize a repo for task
+  authoring, or set up a tasks/ folder with one summary per repo. Runs the
+  exploration in parallel.
 disable-model-invocation: true
 ---
 
@@ -17,9 +19,9 @@ disable-model-invocation: true
 
 Take a set of already-selected seed **repositories** and produce, for each one, a
 dense `repo_summary.md` that a task author can use to invent **original**
-tasks that meet the task spec. The summary must include a real **mental model** of the
-repo: how it works end-to-end, its type/module hierarchy, and where ~100-LoC
-fail2pass tasks naturally live.
+tasks that meet the Alibaba task spec. The summary must include a real **mental
+model** of the repo: how it works end-to-end, its type/module hierarchy, and where
+~100-LoC fail2pass tasks naturally live.
 
 This skill is the step **after** `seed-repo-selection`. Selection picks
 the repos; this explores them.
@@ -32,20 +34,21 @@ the repos; this explores them.
 - Tailor everything to the task constraints (see below). Especially flag what is
   **offline-safe** vs needs network/display/GPU/live services — this gates whether
   a surface is usable for a containerized fail2pass task.
+- Flag surfaces that could target Alibaba high-priority dimensions when applicable.
 - Explore in **parallel** (one read-only subagent per repo). The main agent does
   `git clone` and writes files; subagents only analyze and return markdown.
 
 ## Task constraints the exploration serves
 
 - **~100 LoC gold patch across multiple files** → find surfaces with that natural
-  change size (a parser rule, an evaluator branch, a filter, a serializer path).
 - **fail2pass + pass2pass tests** → prefer code with dense, deterministic, fast
   **unit** tests that don't need network/display/GPU/live services.
-- **<100 MB git image, no future commits/reflog/remote, offline Docker build** →
-  record SDK/runtime versions, what to pre-cache (NuGet/pip/npm/Maven), native
-  deps, submodules, and the smallest verify command.
+- **`workspace.tar.gz` env, offline Docker build** → record SDK/runtime versions,
+  what to pre-cache (NuGet/pip/npm/Maven), native deps, submodules, and the
+  smallest verify command.
 - **Feature implementation AND bug fixes** → identify both kinds of surfaces.
-- **Difficulty mix (Medium/Difficult)** → note which surfaces are subtle vs simple.
+- **Difficulty mix** → note which surfaces are subtle vs simple; flag candidates for
+  Alibaba Hard band (opus ≤60%, 20+ turns).
 
 ## Workflow
 

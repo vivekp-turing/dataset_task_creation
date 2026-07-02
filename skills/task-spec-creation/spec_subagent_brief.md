@@ -43,21 +43,23 @@ thing" tasks; anything needing live infra; anything mirroring a public bug.
 
 ## Requirements the spec must satisfy
 
-- Harbor format with a **separate gold patch in `solution/`**; ~100 LoC, **multiple
+- Alibaba Harbor format with embedded gold in `solution/solve.sh`; ~100 LoC, **multiple
   files**; feature impl OR bug fix.
-- **fail2pass + pass2pass**, **no internet**, offline Docker, **<100MB git image**.
-- Difficulty target **Hard** (frontier solve <50%) unless you justify Medium.
+- **fail2pass + pass2pass**, **no internet**, `workspace.tar.gz` env.
+- **Taxonomy tags** + **Alibaba meta** + **rubric seeds** (correctness mirrors verifier).
+- Difficulty target **Hard** (claude-opus-4.6 pass ≤60%) unless you justify Medium.
+- Design for ≥20 agent turns and ≥20% pass-rate gap vs qwen and sonnet.
 - Problem statement: **problem/behavior only** — no "where to look" file lists, no
   test info, no implementation steps.
 
 ## Output
 
-Follow `task_spec_template.md` exactly. Mandatory sections: header block (difficulty
-target, type, patch size, offline), one-line, problem domain & current behavior,
+Follow `task_spec_template.md` exactly. Mandatory sections: header block, **Taxonomy
+(Alibaba)**, **Alibaba meta**, one-line, problem domain & current behavior,
 **Why it is hard (deliberately)**, **Golden patch — feasibility & approach** (name
 files + oracle), **fail2pass test strategy** (primary + edges + pass2pass + run
-command), files-touched estimate (~100 LoC), Harbor/image notes, and a **non-leaking
-problem-statement draft**.
+command), **Rubric seeds**, files-touched estimate (~100 LoC), Harbor/image notes,
+and a **non-leaking problem-statement draft**.
 
 Ground every architectural/flow claim in a real file you actually inspected. If you
 cannot see both the golden and the tests for a surface, pick a different surface.
