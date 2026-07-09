@@ -1,0 +1,4 @@
+anthropic>=0.40
+# TOML parsing for task.toml: tomllib is stdlib on Python 3.11+.
+# On Python <3.11, install one of the following (tomli preferred):
+tomli>=2.0; python_version < "3.11"
