@@ -1,0 +1,5 @@
+google-api-python-client>=2.197.0
+google-auth>=2.55.0
+pydantic>=2.13.4
+pydantic-ai>=2.0.0
+typer>=0.26.7

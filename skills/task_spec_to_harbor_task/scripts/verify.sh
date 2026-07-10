@@ -12,9 +12,14 @@ verify(){ s=$1; echo "===== $s ====="
   T="$ROOT/harbor_tasks/$s"; C="$ROOT/clones/$s"
   [ -d "$T" ] || { echo "MISSING TASK FOLDER"; return; }
   n=$(find "$T" -type f | wc -l | tr -d ' '); echo "files: $n"
-  for f in instruction.md task.toml environment/Dockerfile solution/gold_patch.diff solution/solve.sh tests/test_patch.diff tests/test.sh; do
+  for f in instruction.md task.toml environment/Dockerfile environment/problem_statement.md solution/golden.patch solution/solve.sh tests/test.sh; do
     [ -f "$T/$f" ] || echo "  MISSING $f"
   done
+  # Extract the test-only patch embedded in tests/test.sh (heredoc markers).
+  TP="/tmp/tp_$s.diff"
+  awk "flag && /^__TEST_PATCH_EOF__\$/ {exit} flag {print} /<< '__TEST_PATCH_EOF__'/ {flag=1}" \
+    "$T/tests/test.sh" > "$TP" 2>/dev/null
+  [ -s "$TP" ] || echo "  WARN: no embedded test patch found in tests/test.sh"
   # base_commit from task.toml (fallback to Dockerfile REPO_SHA)
   SHA=$(grep -E '^base_commit' "$T/task.toml" 2>/dev/null | head -1 | sed -E 's/.*"([0-9a-f]+)".*/\1/')
   [ -z "$SHA" ] && SHA=$(grep -E 'REPO_SHA=' "$T/environment/Dockerfile" 2>/dev/null | head -1 | sed -E 's/.*REPO_SHA=([0-9a-f]+).*/\1/')
@@ -30,10 +35,15 @@ verify(){ s=$1; echo "===== $s ====="
       echo "  WARN: base_commit not in clone; verifying against HEAD"
     fi
   fi
-  git -C "$WT" apply --check "$T/solution/gold_patch.diff" 2>/dev/null && echo "GOLD ok" || echo "GOLD FAIL"
-  git -C "$WT" apply --check "$T/tests/test_patch.diff" 2>/dev/null && echo "TEST ok" || echo "TEST FAIL"
-  git -C "$WT" apply --check "$T/solution/gold_patch.diff" "$T/tests/test_patch.diff" 2>/dev/null && echo "BOTH ok" || echo "BOTH FAIL"
-  grep -E "^\+\+\+ b/.*([Tt]est|spec|__tests__)" "$T/solution/gold_patch.diff" >/dev/null && echo "WARN: gold may touch tests" || echo "gold=source-only ok"
+  git -C "$WT" apply --check "$T/solution/golden.patch" 2>/dev/null && echo "GOLD ok" || echo "GOLD FAIL"
+  if [ -s "$TP" ]; then
+    git -C "$WT" apply --check "$TP" 2>/dev/null && echo "TEST ok" || echo "TEST FAIL"
+    git -C "$WT" apply --check "$T/solution/golden.patch" "$TP" 2>/dev/null && echo "BOTH ok" || echo "BOTH FAIL"
+  else
+    echo "TEST skip (no embedded patch)"; echo "BOTH skip"
+  fi
+  grep -E "^\+\+\+ b/.*([Tt]est|spec|__tests__)" "$T/solution/golden.patch" >/dev/null && echo "WARN: gold may touch tests" || echo "gold=source-only ok"
+  rm -f "$TP"
   [ -n "$TMPWT" ] && { git -C "$C" worktree remove --force "$TMPWT" >/dev/null 2>&1; rm -rf "$TMPWT"; }
   c=$(git -C "$C" status --porcelain 2>/dev/null | wc -l | tr -d ' '); echo "clone dirty lines: $c"
 }

@@ -1,154 +1,276 @@
 # SWE Task Generation
 
-This repo holds the skills and source data used to turn **seed repositories** into
-**hard, original SWE agent tasks** in Harbor format. It captures the
-end-to-end pipeline: pick the right repos, build a deep mental model of each, ideate
-task surfaces, write a per-repo spec, build the Harbor task, then iterate with evals,
-hardening, and human QA until each task is genuinely hard, fair, and shippable.
+This repo holds the skills, source data, and QC tooling used to turn **Reflection-approved
+seed repositories** into **hard, original SWE agent tasks** in Harbor (SWE-Bench-style)
+format. It captures the end-to-end pipeline: pick an approved repo, build a deep mental
+model of it, ideate a ranked set of hard task surfaces, write specs for the top 3, build
+a Harbor task per spec, then filter/QC/eval each until it is genuinely hard, fair, and
+shippable.
 
-The goal of every task is the **"Difficult"** band: a ~100-LoC, multi-file gold patch
-(feature implementation or bug fix), deterministic offline `fail2pass` + `pass2pass`
-tests, a `<100 MB` git image with an offline Docker build, and an original problem
-(not derived from a public issue/PR/CVE) that frontier and OSS models solve `<50%` of
-the time.
+Every task targets a real feature implementation or bug fix with an **average ~350-LoC,
+multi-file gold patch** (≈150–800 LoC), a **comprehensive deterministic offline
+`fail2pass` suite (~10–20 F2P tests)** with the repo's existing suite as the `pass2pass`
+regression guard, a `<100 MB` git image with an offline Docker build, and an **original
+problem** (PR/commit/issue-based, a derivation, or net-new — with net-new kept `<50%`).
+
+**Difficulty target (per the requirements): ~50% Medium / ~50% Hard**, measured as
+**pass@8** in the models' native harnesses:
+
+- **Medium** — GPT-5.5 (Codex) or Opus 4.8 (Claude Code) solves `≤ 4/8`.
+- **Hard** — GPT-5.5 (Codex) or Opus 4.8 (Claude Code) solves `≤ 2/8`.
+
+## Two strict inputs (do not deviate)
+
+1. **Repos:** author tasks **only** from the **Turing-approved subset** of the custom
+   repositories list. The approved list is `docs/turing_approved_repos.txt` (the
+   sign-off applied to `docs/[External] Turing __ ReflectionAi - Swebench custom -
+   Repositories list.xlsx`). This is a **hard gate** — a repo that is not on
+   `turing_approved_repos.txt` must not be used, no exceptions.
+2. **Task requirements:** the single source of truth is
+   `docs/updated_reflection_reqs_9_july.pdf` (`.docx` mirror alongside it). All
+   difficulty bands, LoC targets, F2P counts, taxonomy/labels, diversity caps,
+   submission format, and quality rules come from that file only.
+
+---
+
+## Before Phase 1 — run the pipeline with Claude Code
+
+The phases below are driven by the skills in `skills/`. The cheapest way to run the
+authoring phases (1–4) is **Claude Code CLI pointed at `z-ai/glm-5.2` via OpenRouter**.
+
+1. Set the OpenRouter + model env vars (paste your OpenRouter key into
+   `ANTHROPIC_AUTH_TOKEN`):
+
+```bash
+export ANTHROPIC_BASE_URL="https://openrouter.ai/api"
+export ANTHROPIC_API_KEY=""
+export ANTHROPIC_AUTH_TOKEN="your-sk-or-openrouter-key-here"
+
+export ANTHROPIC_MODEL="z-ai/glm-5.2"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="z-ai/glm-5.2"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="z-ai/glm-5.2"
+export CLAUDE_CODE_SUBAGENT_MODEL="z-ai/glm-5.2"
+```
+
+That is all the configuration needed.
+
+2. Start Claude Code in the terminal (from this repo root):
+
+```bash
+claude
+```
+
+3. Prompt Claude to use the skills and start the phases, e.g.:
+
+> Use the skills in `skills/` to run the SWE task-generation pipeline. Start at Phase 1
+> (`seed-repo-selection`), using **only** repos from `docs/turing_approved_repos.txt`
+> and the requirements in `docs/updated_reflection_reqs_9_july.pdf`, then continue
+> through exploration → spec → Harbor build.
+
+Claude will invoke `seed-repo-selection` → `seed-repo-exploration` → `task-spec-creation`
+→ `task_spec_to_harbor_task` in order. The difficulty filter (Phase 5), Auto QC
+(Phase 6), and full pass@8 evals (Phase 7) are separate steps run with their own
+tooling/harnesses described below.
+
+---
 
 ## Workflow
 
 ```mermaid
 flowchart TD
-    A[seed repos] --> B[SWE metadata sheet<br/>select by LoC, language,<br/>difficulty, code type]
-    B --> C[exploration of repos]
-    C <--> D[initial set of task ideas]
-    D --> E[task spec creation<br/>spec of task requirements]
-    E --> F[create tasks in Harbor format]
-    F --> G
-
-    subgraph loop1 [Iterate x times]
-        G[run evals at k=2<br/>summary table +<br/>trajectory / failure-mode analysis] --> H[modification ideas /<br/>hardening]
-    end
-
-    H --> I
-
-    subgraph loop2 [Iterate x times]
-        I[human QA<br/>verifier quality + task instructions] --> J[run evals at pass@k]
-    end
+    A[Turing-approved repos<br/>docs/turing_approved_repos.txt] --> B[Phase 1 · select seed repos<br/>by LoC, language, difficulty,<br/>code type — approved only]
+    B --> C[Phase 2 · explore repos]
+    C <--> D[5-6 ranked difficult task ideas<br/>per repo]
+    D --> E[Phase 3 · task specs<br/>top 3 ideas ⇒ task_spec_1..3.md]
+    E --> F[Phase 4 · build a Harbor task<br/>per spec]
+    F --> G[Phase 5 · cheap-model difficulty filter<br/>Sonnet 5 pass@1 · Claude Code<br/>solved ⇒ too easy ⇒ drop]
+    G --> H[Phase 6 · Auto QC<br/>ARIA 8-rubric quality + difficulty<br/>accept/reject · skill: auto-qc]
+    H --> I[Phase 7 · pass@8 evals<br/>Opus 4.8 · Claude Code + Daytona<br/>GPT-5.5 · Codex + Daytona]
 ```
 
-Each phase below maps to a step in that diagram. Phases 1–3 are automated by the
-skills in this repo; phases 4–6 are described as process steps (the eval steps are
-kept high-level on purpose — they run on Harbor's eval harness).
+Phases 1–4 are automated by the skills in this repo. Phase 5 is a cheap pre-filter, Phase
+6 is the automated Auto-QC (ARIA) pass, and Phase 7 is the final pass@8 benchmark that
+fills the `pass_at_k_*` metadata.
 
 ---
 
 ### Phase 1 — Select seed repos  ·  skill: [`seed-repo-selection`](skills/seed-repo-selection/)
 
-Start from the SWE metadata sheet
-(`Turing SWEBench Public Dataset (Long-Range Tasks only, n=2551).xlsx`, included here)
-and select **distinct, high-quality repositories** — not the sheet's existing tasks —
-to author *original* tasks from.
+Author *original* tasks **only** from Turing-approved repos. Start from the metadata
+sheet (`docs/Turing SWEBench Public Dataset (Long-Range Tasks only, n=2551).xlsx`) for
+per-repo signals, but **restrict the candidate set to `docs/turing_approved_repos.txt`** —
+never select a repo that is not on that list.
 
-The skill (`skills/seed-repo-selection/scripts/select_seed_repos.py`) filters and ranks rows
-against the task requirements and writes a deduped CSV (one row per repo):
+The skill (`skills/seed-repo-selection/scripts/select_seed_repos.py`) filters and ranks
+against `updated_reflection_reqs_9_july` and writes a deduped CSV (one row per repo):
 
-- **Metadata used** (mirrors the diagram): per-task patch size (`instance_loc`),
-  total repo size (`loc`), `language`, `difficulty_score`, `code_type_primary`
-  (feature / bug-fix / refactor), `f2p_count` / `p2p_count`, `stars`.
-- **Quality gate** (all tunable): `instance_loc` in a ~100-LoC band, `f2p_count >= 3`,
-  `stars >= 250`, sane repo size (drops the unknown/huge sentinel) so the image stays
-  small, and code type in {feature, bug-fix, refactor}.
-- **Coverage**: pick N repos per language group (e.g. `JS/TS, Python, Java, C#`),
-  with a bug-fix/feature mix preserved by the ranking score.
+- **Metadata used:** per-task patch size (`instance_loc`), total repo size (`loc`),
+  `language`, `difficulty_score`, `code_type_primary` (feature / bug-fix / refactor),
+  `f2p_count` / `p2p_count`, `stars`.
+- **Quality gate** (all tunable): `instance_loc` in the ~350-LoC band (≈150–800),
+  `f2p_count >= 5` (a signal the repo has dense tests — authored tasks target ~10–20 F2P),
+  `stars >= 250` (≥40% of tasks must come from >1k-star repos), sane repo size (drops the
+  unknown/huge sentinel to keep the image `<100 MB`), and code type in
+  {feature, bug-fix, refactor}.
+- **Coverage:** pick N repos per language group; the global language distribution and the
+  diversity caps (no repo `>10%`, no owner `>20%`, ≥8 languages, no language `>30%`) are
+  reconciled batch-wise later.
 
-**Output:** `seed_repos.csv` — the candidate repos that feed exploration.
+**Output:** `seed_repos.csv` — candidate approved repos that feed exploration.
 
 ### Phase 2 — Explore repos & ideate task surfaces  ·  skill: [`seed-repo-exploration`](skills/seed-repo-exploration/)
 
-For each selected repo, shallow-clone it and run one **read-only exploration
-subagent** (in parallel batches) that returns a dense `repo_summary.md`. The summary
-is task-authoring intelligence, not docs:
+For each selected repo, shallow-clone it and run one **read-only exploration subagent**
+(in parallel batches) that returns a dense `repo_summary.md`. The summary is
+task-authoring intelligence, not docs:
 
 - overview, build/test/tooling, architecture, and a real **mental model** (type
   hierarchy, module graph, end-to-end pipeline) — every claim cites a real file path;
 - **Testing** + **Offline / Containerization Notes** — which test layers are
   offline-safe (unit) vs need network/display/GPU/live services (the offline gate);
-- **"Good Surfaces for Original Tasks"** — 8–14 file-cited candidate task ideas, each
-  marked feature vs bug-fix and offline-safe vs not, with a ~100-LoC change sketch.
+- **"Difficult Task Ideas"** — **exactly 5–6 file-cited ideas, ranked hardest-first**.
+  Each names the implementation file(s) + the test file(s) that would anchor fail2pass,
+  an avg-~350-LoC change sketch, a one-line **why it's hard** + a rough **difficulty
+  target** (Hard ≤2/8 or Medium ≤4/8), and is marked feature vs bug-fix, tagged with a
+  likely taxonomy **category** + **source type**, and offline-safe vs not.
 
-This is the **exploration ⇄ initial task ideas** loop in the diagram: the "Good
-Surfaces" section *is* the initial set of task ideas, and thin or incomplete summaries
-are re-explored until each repo has a solid summary plus viable surfaces.
+This is the **exploration ⇄ initial task ideas** loop: the ranked "Difficult Task Ideas"
+section *is* the candidate pool that Phase 3 selects the top 3 hardest from, so thin
+summaries (or ones without 5–6 ranked, genuinely-hard ideas) are re-explored.
 
 **Output:** `tasks/<repo-slug>/repo_summary.md` per repo.
 
-### Phase 3 — Write the task spec  ·  skill: [`task-spec-creation`](skills/task-spec-creation/)
+### Phase 3 — Write the task specs  ·  skill: [`task-spec-creation`](skills/task-spec-creation/)
 
-Turn each explored repo into **one** `task_spec.md` describing the single strongest,
-deliberately **hard, original** task to build from it — the "spec of task
-requirements" in the diagram. This is the contract the later Harbor build is written
-against.
+Turn each explored repo into **up to three** task specs — `task_spec_1.md`,
+`task_spec_2.md`, `task_spec_3.md` (#1 = hardest) — by **selecting the top 3 most
+difficult ideas** from that repo's ranked 5–6 "Difficult Task Ideas". Each spec is one
+distinct, deliberately **hard, original** task and the contract its Harbor build is
+written against.
 
-- **Pick exactly one surface** per repo — the hardest viable one — from the repo's
-  "Good Surfaces", then confirm it against the actual cloned source.
-- **Prove originality** against the pinned SHA and classify the task as one of:
-  net-new feature, real edge-case gap, or (last resort) seeded regression — so it is
-  not derived from a public issue/PR/CVE and the gap/bug is genuinely real in the
-  snapshot.
-- **Confirm buildability**: a ~100-LoC multi-file gold patch is feasible, there's an
-  exact correctness oracle, and deterministic offline `fail2pass` + `pass2pass` tests
-  can be written.
-- **Don't leak**: the problem-statement draft describes behavior only — no file
-  lists, no test names, no implementation steps.
+- **Rank & select the top 3** of the repo's 5–6 candidate ideas by genuine difficulty,
+  confirming each against the actual cloned source. One idea → one spec; never merge or
+  chain ideas. If fewer than 3 are viable/buildable, write only the viable ones and note
+  why.
+- **Prove originality** against the pinned SHA and classify the `source_type`
+  (PR-based, commit-based, issue-based, derivation, or net-new — net-new `<50%` overall).
+  For PR/commit/issue tasks pin the **pre-fix parent** so the deliverable is absent at
+  baseline.
+- **Confirm buildability** per spec: an avg-~350-LoC multi-file gold patch is feasible,
+  there's an exact correctness oracle, and a deterministic offline **~10–20 F2P** suite
+  can be written (the repo's existing suite is the `pass2pass` guard).
+- **Assign taxonomy:** category/subcategory + objective/artifact labels from the
+  `updated_reflection_reqs_9_july` taxonomy.
+- **Don't leak:** the problem-statement draft describes behavior only — no file lists, no
+  test names, no implementation steps, no root-cause/fix hints.
 
 The skill ships a `difficulty_playbook.md` (levers + ranked "hard archetypes" + a
-self-test for "is this actually hard?") and a `task_spec_template.md` for the exact
-output shape.
+self-test), a `task_taxonomy.md`, and a `task_spec_template.md` for the exact output
+shape.
 
-**Output:** `tasks/<repo-slug>/task_spec.md` per repo (alongside `repo_summary.md`).
+**Output:** `tasks/<repo-slug>/task_spec_{1,2,3}.md` per repo (alongside
+`repo_summary.md`), hardest-first.
 
-### Phase 4 — Build the task in Harbor format
+### Phase 4 — Build the tasks in Harbor format  ·  skill: [`task_spec_to_harbor_task`](skills/task_spec_to_harbor_task/)
 
-Implement each `task_spec.md` as a complete Harbor task. A task is hard and
-demanding (>1h agent runtime, high token use), and the instruction must **not**
-leak the verifier. Typical layout:
+Implement **each** `task_spec_N.md` as its own complete, runnable Harbor task (point the
+skill at each spec separately). The instruction must **not** leak the verifier. Layout
+(matching the Reflection submission format):
 
-- `instruction.md` — the behavior-focused, slightly underspecified problem statement;
-- `task.toml` — task metadata/config;
-- `environment/` — the repo snapshot at the pinned SHA (plus a seeded regression, if
-  that originality pattern is used);
-- `solution/` — the ~100-LoC multi-file gold patch, kept separate from the task;
-- `tests/` — the verifiers: deterministic `outcome_tests`, an LLM `outcome_judge` on
-  the deliverable, and an LLM `process_judge` on the trajectory, composited into a
-  final reward.
+- `instruction.md` — behavior-focused, slightly underspecified problem statement;
+- `task.toml` — config + full `[metadata]` (repo, base_commit, `source_type`,
+  difficulty + explanation, category/subcategory, objective/artifact labels,
+  `num_f2p_tests`, and `pass_at_k_*` filled after eval);
+- `environment/` — `Dockerfile` (pins the base SHA, installs deps at build time, bakes a
+  pristine `/opt/baseline`) + `problem_statement.md`;
+- `solution/` — `golden.patch` (source-only, avg ~350 LoC, multi-file, matching the
+  canonical upstream fix when PR-based) + `solve.sh`;
+- `tests/` — `test.sh` embedding the hidden **new F2P test patch inline**, restoring
+  pristine tests, then running the new F2P + a relevant existing pass2pass subset offline
+  and writing a `0`/`1` reward.
 
-**Output:** one Harbor task folder per repo.
+Grading is a single **deterministic** offline test run (no LLM judge). Verify with the
+skill's `scripts/verify.sh` that both patches apply at the base SHA, source/test are
+cleanly separated, and the instruction leaks nothing.
 
-### Phase 5 — Eval & harden  ·  *iterate ×N*
+**Output:** one Harbor task folder per spec (up to 3 per repo).
 
-Run **Harbor evals** on each built task (a low `k`, e.g. `k=2`, is enough to get
-signal) and review the results, then deepen and tighten the task. No eval commands are
-documented here — the tasks are run on Harbor's eval harness.
+### Phase 5 — Cheap-model difficulty pre-filter  ·  Sonnet 5 pass@1 (Claude Code)
 
-- Produce an **eval summary table** across trials (reward, pass rate, time, tokens).
-- Do **trajectory + failure-mode analysis**: segment exploration vs execution, run
-  root-cause analysis on agent-attributable failures, and aggregate them into a
-  ranked failure taxonomy.
-- Feed that into **modification / hardening**: underspecify the instruction, force
-  more exploration, and tighten the deterministic tests so leading models score low
-  (target a low mean deterministic reward) while the task stays fair and solvable.
+Before spending on the full pass@8 benchmark, cheaply screen out tasks that aren't
+actually hard. Run a **single attempt (pass@1)** of the built task through the **Harbor
+eval harness with the Claude Code agent on Claude Sonnet 5**.
 
-Repeat until the task is genuinely hard, realistic, and still solvable.
+- If **Sonnet 5 solves the task** (reward = 1), it is **not difficult** — such a task
+  will almost certainly be solved by Opus 4.8 / GPT-5.5, so **drop it** (or send it back
+  to Phase 3/4 to be hardened).
+- If **Sonnet 5 fails**, the task survives to Auto QC and the full pass@8 benchmark.
 
-### Phase 6 — Human QA & pass@k  ·  *iterate ×N*
+This mirrors the requirements' guidance to use a cheaper model for an initial difficulty
+assessment before the expensive frontier-model runs. Save the pass@1 results
+(`.jsonl`/`.json`/per-task dir) — Phase 6's Auto-QC folds them in as a difficulty signal
+via `--prefilter`.
 
-Final human-in-the-loop gate before a task ships:
+### Phase 6 — Auto QC  ·  skill: [`auto-qc`](skills/auto-qc/)
 
-- **QA by a human** on **verifier quality** (no false positives/negatives; the gold
-  patch passes, plausible-but-wrong solutions fail) and **task instructions** (clear,
-  non-leaking, behavior-focused, solvable).
-- **Run Harbor evals at `pass@k`** to confirm the task behaves as intended at higher
-  sampling.
+Gate each surviving Harbor task **accept/reject** with the `auto-qc` skill, which
+combines two signals into one verdict:
 
-Iterate on QA findings until the task is clean and shippable.
+1. **Quality (primary gate)** — the vendored **ARIA-for-Harbor** pipeline scores the task
+   on eight quality rubrics: `issue_clarity`, `gold_patch_clarity`,
+   `gold_patch_to_issue_alignment`, `test_clarity`, `test_to_issue_alignment`,
+   `fairness`, `instruction_leakage`, and `test_robustness`. Any failing gate → reject.
+2. **Difficulty (modulates an accepted task)** — the optional Phase 5 cheap-model
+   pass@1 results, passed via `--prefilter`. A task the cheap model already solves is
+   flagged `difficulty_concern` (or rejected under `--strict-difficulty`).
+
+The skill drives everything through the orchestrator at `scripts/auto_qc/auto_qc.py`
+(which runs `uv run annotate-one` inside `ARIA-FOR-HARBOR/` per task):
+
+```bash
+# one-time: sync the ARIA env + set a provider key
+cd scripts/auto_qc/ARIA-FOR-HARBOR && uv sync   # + export ANTHROPIC_API_KEY (or .env)
+
+cd scripts/auto_qc
+
+# QC one task
+python auto_qc.py <path>/harbor_tasks/<task-slug> --output-dir out
+
+# QC a batch, folding in the Phase 5 Sonnet 5 pass@1 pre-filter
+python auto_qc.py <path>/harbor_tasks --prefilter <sonnet5_pass1.jsonl> --output-dir out
+
+# strict difficulty gate: also reject anything the cheap model solved at pass@1
+python auto_qc.py <path>/harbor_tasks --prefilter <results/> --strict-difficulty
+```
+
+Outputs land under `--output-dir`: a per-task `autoqc/<slug>.autoqc.json` (final verdict,
+reasons, flags, all 8 rubric scores, difficulty signal), an `auto_qc_summary.{json,csv}`
+table, and the raw ARIA annotation under `aria/`. Note Auto-QC is an **LLM annotation** of
+the instruction/patch/tests — it never runs the Docker verifier (that deterministic
+build+apply+test check is `task_spec_to_harbor_task/scripts/verify.sh`) and is a screen,
+not a substitute for human QA on borderline tasks. Only accepted tasks proceed to the
+final benchmark. See `skills/auto-qc/SKILL.md` and `scripts/auto_qc/README.md` for detail.
+
+### Phase 7 — Final pass@8 benchmark  ·  Opus 4.8 (Claude Code) + GPT-5.5 (Codex) via Daytona
+
+Establish and record the official difficulty by running **pass@8** in each model's native
+harness through the **Harbor eval harness on Daytona**:
+
+- **Claude Code agent + Claude Opus 4.8** — pass@8.
+- **Codex agent + GPT-5.5** — pass@8.
+
+Run each task 8 times per harness and record the solve counts back into the task's
+`task.toml [metadata]`:
+
+```toml
+pass_at_k_opus_4_8 = "x/8"   # Claude Code + Opus 4.8
+pass_at_k_gpt_5_5  = "x/8"   # Codex + GPT-5.5
+```
+
+Classify by the worse (higher) of the two solve rates against the bands: **Medium** if
+either harness solves `≤ 4/8`, **Hard** if either solves `≤ 2/8`. Tasks that don't warrant
+their difficulty tier are hardened (back to Phase 3/4) and re-benchmarked; the surviving,
+correctly-classified tasks are shippable.
 
 ---
 
@@ -156,11 +278,20 @@ Iterate on QA findings until the task is clean and shippable.
 
 | Path | What it is |
 |------|------------|
-| `skills/seed-repo-selection/` | Skill — select & rank seed repos from the metadata sheet into a CSV. |
-| `skills/seed-repo-exploration/` | Skill — deep-explore each repo into a `repo_summary.md` with task surfaces. |
-| `skills/task-spec-creation/` | Skill — pick one hard, original surface per repo and write `task_spec.md`. |
-| `Turing SWEBench Public Dataset (Long-Range Tasks only, n=2551).xlsx` | Source metadata sheet that Phase 1 reads. |
+| `skills/seed-repo-selection/` | Phase 1 — select & rank approved seed repos into a CSV. |
+| `skills/seed-repo-exploration/` | Phase 2 — deep-explore each repo into a `repo_summary.md` with 5–6 ranked difficult task ideas. |
+| `skills/task-spec-creation/` | Phase 3 — select the top 3 hardest ideas per repo and write `task_spec_{1,2,3}.md`. |
+| `skills/task_spec_to_harbor_task/` | Phase 4 — build one complete Harbor task from each `task_spec_N.md` + repo clone. |
+| `skills/auto-qc/` | Phase 6 — accept/reject gate combining ARIA 8-rubric quality + cheap-model difficulty pre-filter. |
+| `scripts/auto_qc/auto_qc.py` | Phase 6 orchestrator the `auto-qc` skill drives (runs ARIA per task + folds in the pre-filter). |
+| `scripts/auto_qc/ARIA-FOR-HARBOR/` | Vendored ARIA-for-Harbor annotation pipeline the orchestrator calls. |
+| `scripts/tag_task.py` | Category/subcategory/language tagging for a task (LLM judge over the taxonomy). |
+| `docs/turing_approved_repos.txt` | **The approved repo gate** — only these repos may be used. |
+| `docs/updated_reflection_reqs_9_july.pdf` / `.docx` | **The task requirements** — single source of truth. |
+| `docs/Turing SWEBench Public Dataset (Long-Range Tasks only, n=2551).xlsx` | Per-repo metadata signals read by Phase 1. |
+| `docs/[External] Turing __ ReflectionAi - Swebench custom - Repositories list.xlsx` | The custom repositories list the approved subset is drawn from. |
 
 Each skill is a self-contained folder with a `SKILL.md` (plus templates/briefs/scripts).
-They are explicitly invoked — run them in order: **selection → exploration → spec
-creation** — then continue with the Harbor build, eval/hardening, and QA phases above.
+Run them in order — **selection → exploration → spec creation → Harbor build** — then
+continue with the difficulty filter (Phase 5), Auto QC (Phase 6), and the pass@8
+benchmark (Phase 7).

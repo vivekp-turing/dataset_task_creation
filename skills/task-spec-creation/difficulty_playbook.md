@@ -1,9 +1,23 @@
 # Difficulty playbook — making a task hard on purpose
 
-The "Difficult" band = **frontier (Opus, GPT-5.5) and OSS models solve
-< 50%**. A task is not hard because the repo is big or the patch is long. It is hard
-because **correctness requires reasoning a strong model tends to get partially
-wrong.** Use these levers.
+Target distribution ≈ **50% Medium / 50% Hard**, measured as **pass@8** with the
+models in their harnesses (Codex + Claude Code):
+
+- **Medium** — Opus 4.8 / GPT-5.5 solve **≤ 4/8**.
+- **Hard** — Opus 4.8 / GPT-5.5 solve **≤ 2/8**.
+
+Prefilter cheaply: a task easily solved by Sonnet/Haiku is unlikely to be Hard for
+Opus, so drop it early. A task is not hard because the repo is big or the patch is
+long. It is hard because **correctness requires reasoning a strong model tends to get
+partially wrong**, and difficulty must be **justified** — it must arise from reasoning
+complexity, cross-module understanding, subtle behavioral differences, or deep domain
+knowledge.
+
+**Good difficult tasks:** large feature additions, complex debugging, root-cause
+analysis, hard security/research problems. **Bad difficult tasks:** combining multiple
+unrelated tasks into one; tasks that are "hard" only because they're vague or
+underspecified. Keep every task **fair, realistic, and solvable** by an expert within
+the time/resource limits. Use these levers.
 
 ## The self-test (apply to every candidate)
 
@@ -70,63 +84,72 @@ surface from the repo_summary.
 
 ## Keeping it FAIR while hard (don't make it impossible or flaky)
 
-- A correct golden must **exist and be ~100 LoC** — hard ≠ huge. If the only fix is
-  500 LoC across 15 files, it's the wrong surface.
-- Tests must be **deterministic & offline** — no timing/wall-clock dependence (drive
-  delays from headers/inputs), no network, no GPU/display. Use property tests with a
-  reference, not flaky randomness.
+- A correct golden must **exist and average ~350 LoC (≈150–800) across multiple
+  files** — hard ≠ huge. If the only fix is 2000 LoC across 30 files, it's the wrong
+  surface (or a chain of unrelated tasks).
+- **One coherent task, not a chain.** Difficulty must come from the logic, not from
+  stapling several unrelated changes together.
+- **Comprehensive but scoped tests:** author ~10–20 NEW F2P (min 10) to prevent
+  reward hacking, including one that reproduces the target behavior. **Don't write new
+  pass2pass** — the repo's **existing** suite is the pass2pass guard; just run the
+  relevant existing subset to confirm no regression. Tests must be **deterministic &
+  offline** — no timing/wall-clock dependence (drive delays from headers/inputs), no
+  network, no GPU/display — **outcome-based** (assert behavior, not the file edited /
+  diff shape / source keywords), and **independent of the reference solution**. Fast
+  enough for the timeout. Use property tests with a reference, not flaky randomness.
 - The **problem statement stays solvable**: behavior-focused and slightly
   underspecified, but a capable engineer reading it could find the surface. Hardness
   comes from the *logic*, not from hiding the goal or leaking the tests.
-- **No verifier leakage** — don't encode the test's exact numbers into the statement.
+- **No verifier leakage** — don't encode the test's exact numbers into the statement,
+  and don't reveal the root cause, the fix, or the files to edit.
 
-## Contamination control + novelty (MANDATORY — the task spec requires NEW original tasks)
+## Source types + snapshot validity (MANDATORY — declare and prove it)
 
-The task spec requires **new, original, novel** tasks — not tasks derived from a
-real issue/PR. This matters for two reasons:
+Tasks may be **PR-based, commit-based, issue-based, a derivation of an existing PR, or
+net-new** — with **net-new kept < 50%** of the dataset. Prefer real
+PR/commit/issue sources (SWE-Bench style): when a task is based on a real upstream
+change, the golden must **match the canonical upstream fix** (not an invented
+alternative), unless that fix is unavailable/unsuitable for benchmark use (justify).
 
-1. **Leakage/training contamination** — a public issue + its fix may already be in
-   model training data, so the "hard" task is trivially solved.
-2. **Snapshot/timeline mismatch** — these repos are pinned to a past snapshot. If you
-   base a task on a real issue, that issue may have been **fixed AFTER the snapshot**
-   (or the feature already landed BEFORE it). Either way the task is invalid: the
-   golden either already exists in-tree or duplicates a real future PR.
+Whatever the source, the task is only valid if it is real **at the pinned base
+snapshot**. Two failure modes to prevent:
+
+1. **Snapshot/timeline mismatch** — pin the **pre-fix parent** commit as the base so
+   the deliverable is ABSENT at baseline. If you pin too late, the fix already landed
+   (golden empty); base it on a change that postdates your snapshot and the task
+   duplicates a future PR.
+2. **Already-correct code** — never describe working code as "broken", and never add a
+   capability that already exists.
 
 Rules:
 
-- **Never base a task on a known public GitHub issue, PR, changelog entry, or CVE.**
-  If you recognize the exact bug/feature as real and famous, discard it.
-- **Verify against the actual snapshot source (do not trust memory or the summary):**
-  - If the task is a **feature**, confirm the capability is **genuinely absent** in
-    the cloned source at the pinned SHA (grep for the API/method/option). If it's
-    already implemented, the task is invalid — pick a real gap or re-frame.
-  - If the task is a **bug-fix**, confirm the buggy behavior is real in the snapshot
-    (or that you will *introduce* a synthetic regression — see below). Do NOT claim
-    existing, correct code is "broken."
-- **STRONGLY PREFER net-new features and genuinely-missing edges/variants.** This is
-  the whole point of seed-repo selection + deep exploration: find a real capability
-  the snapshot lacks (a missing API/option/variant) or a real edge case it doesn't
-  handle. These are the highest-quality original tasks. Do the work to find one.
-- **Seeded regression is a LAST RESORT, not the default.** Only fall back to injecting
-  a bug if, after genuinely searching the repo, there is no buildable net-new feature
-  or real edge gap on a hard surface. If used, the spec must say so explicitly
-  ("environment seeds a regression in X; task is to restore correct behavior") — but
-  treat needing this as a signal you may have picked a weak surface.
-- Favor obscure-but-real modules over headline features (less trafficked = less
-  contaminated and less likely already-fixed).
-- Realistic > contrived: it should read like a plausible feature-request or bug
-  report for that project — even if synthetic.
+- **Declare the source type in the spec** and mark it in `task.toml` (`source_type`).
+- **Verify against the actual snapshot source (don't trust memory or the summary):**
+  - PR/commit/issue-based → identify the real change, pin its **parent** SHA, confirm
+    the deliverable is absent at baseline, and reproduce the canonical fix as golden.
+  - Net-new feature → grep to confirm the capability is **genuinely absent** at the
+    pinned SHA.
+  - Real edge-case gap → the feature exists but the specific variant/edge is unhandled
+    in the snapshot; confirm the gap is real.
+- **Seeded regression is a LAST RESORT.** Only inject a bug if, after genuinely
+  searching, there's no real source/gap on a hard surface. The spec must say so
+  ("environment seeds a regression in X; baseline differs from upstream").
+- Contamination note: extremely famous public issues/CVEs are more likely memorized by
+  models; favor substantive, less-headline changes so the task isn't trivially solved.
+- Realistic > contrived: it should read like a plausible feature-request or bug report
+  for that project.
 
-### Three valid originality patterns (state which one in the spec; prefer 1 & 2)
+### Valid source types (state which in the spec; keep net-new < 50%)
 
-1. **Net-new feature** (preferred) — capability is confirmed absent in the snapshot;
-   gold patch adds it. (Verify absence by grep.)
-2. **Real edge-case gap** (preferred) — feature exists but a specific variant/edge is
-   unhandled in the snapshot; gold patch handles it. (Verify the gap is real.)
-3. **Seeded regression** (last resort only) — subsystem is correct in the snapshot;
-   environment ships a realistic injected bug; gold patch restores correctness. (Spec
-   must declare the seeded bug + that baseline `environment/` differs from upstream.)
-   Use only when 1 and 2 are genuinely unavailable on a hard surface.
+1. **PR-based / commit-based / issue-based** (preferred) — a real upstream change;
+   base = its pre-fix parent; golden = the canonical fix. (Verify the deliverable is
+   absent at baseline.)
+2. **Derivation** — an existing PR adapted/extended; note what differs from upstream.
+3. **Net-new feature / real edge-case gap** — capability/edge confirmed absent in the
+   snapshot; gold patch adds/handles it. (Verify absence by grep.) Net-new < 50%.
+4. **Seeded regression** (last resort only) — subsystem is correct; environment ships
+   a realistic injected bug; gold patch restores correctness. Use only when 1–3 are
+   genuinely unavailable on a hard surface.
 
-If you cannot place your task in one of these three and prove it against source, the
-task is not valid — pick another surface.
+If you cannot place your task in one of these and prove it against source, the task is
+not valid — pick another surface.

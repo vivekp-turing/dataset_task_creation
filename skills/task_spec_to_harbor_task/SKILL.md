@@ -3,22 +3,28 @@ name: task_spec_to_harbor_task
 description: >-
   Convert a SWE-Bench-style task spec (task_spec.md + a pinned repo
   clone) into ONE complete, runnable Harbor-format task folder — instruction.md,
-  task.toml, environment/Dockerfile, solution/{gold_patch.diff,solve.sh},
-  tests/{test_patch.diff,test.sh} — with a real source-only golden patch and a
-  test-only fail2pass verifier that grades offline by writing a 0/1 reward. Use
-  when asked to build/create a Harbor task (or batch of tasks) from task
-  specs, to author the golden solution + verifier tests for such tasks, or
-  to verify that such Harbor tasks apply cleanly and are non-leaking. Do NOT use
-  the harbor-long-range-task-create skill for this — that is for long-horizon
-  LLM-judge tasks, not SWE-Bench fail2pass tasks.
+  task.toml, environment/{Dockerfile,problem_statement.md},
+  solution/{golden.patch,solve.sh}, tests/test.sh — with a real source-only golden
+  patch (avg ~350 LoC, multi-file) and a comprehensive NEW fail2pass verifier (~10-20
+  F2P tests; the repo's existing suite is the pass2pass guard, not re-authored) that
+  grades offline by writing a 0/1 reward. task.toml [metadata] carries
+  the category/subcategory + objective/artifact labels + source_type + difficulty.
+  Use when asked to build/create a Harbor task (or batch of tasks) from task specs, to
+  author the golden solution + verifier tests, or to verify that such Harbor tasks
+  apply cleanly and are non-leaking. Do NOT use the harbor-long-range-task-create skill
+  for this — that is for long-horizon LLM-judge tasks, not SWE-Bench fail2pass tasks.
 ---
 
 # Task spec → Harbor task
 
 Convert ONE task spec into ONE complete, correct Harbor SWE-Bench-style task
-folder. For a batch, repeat per slug. The golden solution is a real source patch;
-the verifier is a real test patch that **fails on baseline, passes after the
-gold patch**, graded **offline**.
+folder. For a batch, repeat per slug. The golden solution is a real source patch
+(avg ~350 LoC across multiple files, matching the canonical upstream fix for
+PR/commit/issue-based tasks); the verifier is a **comprehensive suite of NEW
+fail2pass tests (~10–20 F2P, including one that reproduces the target behavior)**
+that **fails on baseline, passes after the gold patch**, graded **offline**. The
+repo's **existing** tests are the **pass2pass** guard (already in the image — run a
+relevant subset for regression; do NOT author new pass2pass tests).
 
 This is NOT the long-range/LLM-judge Harbor format. Do not invoke
 `harbor-long-range-task-create`. There is no LLM judge — grading is a single
@@ -27,9 +33,10 @@ deterministic test run that writes `0` or `1` to `/logs/verifier/reward.txt`.
 ## Inputs (per task slug `<S>`)
 
 - Spec: `<root>/tasks/<S>/task_spec.md` — authoritative. Source of: pinned base
-  SHA, golden approach + the exact source files it touches, the fail2pass matrix,
-  the offline run command, image/toolchain notes, a non-leaking problem-statement
-  draft, and the originality proof.
+  SHA, source_type, category/subcategory + objective/artifact labels, golden approach
+  + the exact source files it touches, the fail2pass matrix (~10–20 F2P), the offline
+  run command, image/toolchain notes, a non-leaking problem-statement draft, and the
+  source-type validity proof.
 - Repo: `<root>/clones/<S>/` — real source. Usually already at the baseline SHA;
   confirm with `git -C clones/<S> rev-parse HEAD`. Some tasks pin a **pre-fix
   parent** commit, so the clone HEAD may differ from the spec base SHA — always
@@ -42,45 +49,64 @@ user if ambiguous.
 
 ```
 <S>/
-  instruction.md            # problem statement only — no solution, no leakage
-  task.toml                 # config + [metadata] repo/base_commit/difficulty
-  environment/Dockerfile    # pin SHA, install deps at BUILD time, bake /opt/baseline
-  solution/gold_patch.diff  # golden SOURCE change only (no test files)
-  solution/solve.sh         # embeds gold_patch.diff inline + applies it
-  tests/test_patch.diff     # fail2pass + pass2pass TEST changes only (no source)
-  tests/test.sh             # restore pristine tests, apply test patch, run, write reward
+  instruction.md                  # problem statement only — no solution, no leakage
+  task.toml                       # config + [metadata] taxonomy/source/difficulty
+  environment/Dockerfile          # pin SHA, install deps at BUILD time, bake /opt/baseline
+  environment/problem_statement.md # same non-leaking statement as instruction.md
+  solution/golden.patch           # golden SOURCE change only (no test files)
+  solution/solve.sh               # embeds golden.patch inline + applies it
+  tests/test.sh                   # embeds the NEW fail2pass TEST patch inline; restores
+                                  #   pristine tests, applies it, runs new F2P + existing
+                                  #   (pass2pass) subset offline, writes reward
 ```
 
-Nothing extra inside a task folder. Build/QA helpers (this skill's
+This matches the Reflection submission format: `solution/{solve.sh, golden.patch}`,
+`environment/{Dockerfile, problem_statement.md}`, and a **`tests/` folder limited to
+at most 3 files** (`grade.py`, `config.json`, `test.sh`). Because the test patch is
+**embedded inline in `test.sh`** (like `solve.sh` embeds the golden), the shipped
+`tests/` holds only `test.sh` (add `grade.py`/`config.json` only if your grading needs
+them). Nothing extra inside a task folder. Build/QA helpers (this skill's
 `scripts/verify.sh`) live OUTSIDE the task folders.
 
 ## Hard rules (non-negotiable)
 
-1. **Two cleanly-separated patches.** `gold_patch.diff` = source files ONLY (the
-   real fix/feature). `test_patch.diff` = test files ONLY. Build each by editing
-   the clone, then `git -C clones/<S> --no-pager diff -- <paths>`, then
+1. **Two cleanly-separated patches.** The golden = source files ONLY (the real
+   fix/feature), saved as `solution/golden.patch`. The test patch = test files ONLY,
+   **embedded inline in `tests/test.sh`**. Build each by editing the clone, then
+   `git -C clones/<S> --no-pager diff -- <paths>`, then
    `git -C clones/<S> checkout -- <paths>` to reset. **Never leave the clone dirty.**
-2. **fail2pass is real.** With ONLY the test patch applied (no gold), the new
-   tests must FAIL on baseline; with BOTH applied they must PASS. If you cannot
-   run the toolchain locally, reason carefully from the real source that the new
+2. **fail2pass is real and comprehensive.** With ONLY the test patch applied (no
+   gold), the new tests must FAIL on baseline; with BOTH applied they must PASS. The
+   test patch contains **only NEW F2P tests** — a **comprehensive suite (~10–20, min
+   10)** to prevent reward hacking, including one that reproduces the target behavior.
+   **Do NOT author new pass2pass tests:** the repo's **existing** suite is the
+   pass2pass guard (already baked into the image) — pick a relevant existing subset
+   and run it alongside the new tests so a regression fails grading. Tests must verify
+   **observable behavior/outcome** (never the file edited, diff shape, or source
+   keywords), be deterministic, offline, fast enough for the timeout, and
+   **independent of the reference solution** (don't import/call it). If you cannot run
+   the toolchain locally, reason carefully from the real source that the new
    assertions fail pre-fix and pass post-fix. Prefer asserting against an
-   already-correct oracle in the repo when one exists (rou3 compares interpreted
-   vs compiled output this way).
+   already-correct oracle in the repo when one exists (rou3 compares interpreted vs
+   compiled output this way).
 3. **Pin the baseline SHA from the spec** in the Dockerfile (`REPO_SHA`) and in
    `task.toml` (`base_commit`). Use the real upstream repo URL. For pre-fix-parent
    tasks, use that parent SHA — the SHA where the deliverable is ABSENT.
 4. **Offline at grade time.** Dockerfile may fetch repo + deps at BUILD time;
    after that the agent and verifier have no network. Bake a pristine copy to
    `/opt/baseline` and restore the test dir(s) from it before grading
-   (anti-tamper).
+   (anti-tamper — the agent must not be able to weaken the verifier).
 5. **instruction.md = problem only.** Adapt the spec's non-leaking problem
-   statement. NO file paths to edit, NO function/algorithm prescription, NO
-   mention of tests/verifier/reward, NO "where to look". Describe observable
-   behavior + success criteria. Naming public API/behavior the user wants is fine.
+   statement (and mirror it into `environment/problem_statement.md`). NO file paths
+   to edit, NO function/algorithm prescription, NO root-cause/fix hints, NO mention
+   of tests/verifier/reward, NO "where to look". Describe observable behavior +
+   success criteria. Naming public API/behavior the user wants is fine.
 6. **Working dir is `/testbed`** (SWE-Bench Harbor convention).
-7. **task.toml**: `difficulty` from spec; `allow_internet = false`; `cpus = 2`,
-   `memory_mb = 4096`, `storage_mb = 10240`, `gpus = 0`; verifier timeout 1800,
-   agent 3600, build 1800; `[metadata]` includes `repo` and `base_commit`.
+7. **task.toml** carries the full `[metadata]` (see template): `repo`, `base_commit`,
+   `source_type`, `difficulty` + `difficulty_explanation`, `category`, `subcategory`,
+   `objective_labels`, `artifact_labels`, `num_f2p_tests`, and `pass_at_k_*` (filled
+   after eval). No network at agent/verifier time; `cpus = 2`, `memory_mb = 4096`,
+   `storage_mb = 10240`, `gpus = 0`; verifier timeout 1800, agent 3600, build 1800.
 8. **`test.sh` and `solve.sh` executable** (`chmod +x`).
 9. **Keep image < 10GB, git dir small** — shallow fetch only (`--depth 1`), no
    full history.
@@ -88,15 +114,22 @@ Nothing extra inside a task folder. Build/QA helpers (this skill's
 ## Workflow (per slug)
 
 ```
-- [ ] Read task_spec.md (base SHA, golden files, fail2pass matrix, run cmd, image notes)
-- [ ] Confirm repo URL + that clone has the base SHA (git rev-parse / cat-file)
-- [ ] Build gold_patch.diff: edit SOURCE in clone → diff → reset clone
-- [ ] Build test_patch.diff: edit TESTS in clone → diff → reset clone
-- [ ] Write the 7 files (mirror the reference task; adapt toolchain)
+- [ ] Read task_spec.md (base SHA, source_type, category/labels, golden files,
+      fail2pass matrix, run cmd, image notes)
+- [ ] Confirm repo URL + that clone has the base SHA (git rev-parse / cat-file).
+      For PR/commit/issue-based tasks the base SHA is the PRE-FIX PARENT.
+- [ ] Build golden.patch: edit SOURCE in clone → diff → reset clone (avg ~350 LoC,
+      multi-file; match the canonical upstream fix when PR-based)
+- [ ] Build the test patch (~10–20 NEW F2P, incl. a behavior-reproducing case): edit
+      TESTS in clone → diff → reset clone, then embed inline in tests/test.sh. (No new
+      pass2pass — pick the existing tests/subset to run for regression.)
+- [ ] Write the 7 files (mirror the reference task; adapt toolchain); fill task.toml
+      [metadata] taxonomy from the spec
 - [ ] chmod +x solution/solve.sh tests/test.sh
-- [ ] Verify (scripts/verify.sh <S>): gold/test/both apply @ base SHA; source/test
-      separation; clone clean; instruction non-leak
-- [ ] Report: repo+SHA, files+LoC, apply-checks, run cmd, one-line fail2pass rationale
+- [ ] Verify (scripts/verify.sh <S>): golden + embedded test patch apply @ base SHA;
+      source/test separation; clone clean; instruction non-leak
+- [ ] Report: repo+SHA, source_type, category, files+LoC, #F2P, apply-checks, run cmd,
+      one-line fail2pass rationale
 ```
 
 Always rebuild the diffs **against the base SHA** (use a worktree at that SHA if
@@ -110,35 +143,52 @@ mirror its file shapes. The shapes below are the canonical ones.
 ### task.toml
 
 ```toml
-version = "1.0"
+schema_version = "1.3"  # Harbor format version (NOT task version)
 
 [task]
-name = "<slug-descriptive-name>"
-authors = []
-keywords = ["<lang>", "<area>", "<category>"]
-
-[metadata]
-author_name = "Task Author"
-author_email = "tasks@example.com"
-difficulty = "hard"
-category = "bug-fix"
-tags = ["<lang>", "<area>"]
-repo = "<owner>/<repo>"
-base_commit = "<BASE_SHA>"
-
-[verifier]
-timeout_sec = 1800.0
-
-[agent]
-timeout_sec = 3600.0
+name        = "<owner>/<repo>-<short-slug>"
+description = "<one-line task description>"
+authors     = [{ name = "Turing", email = "tasks@turing.com" }]
+keywords    = ["code", "swe", "<lang>", "<area>"]
+metadata    = { vendor = "Turing" }
 
 [environment]
-build_timeout_sec = 1800.0
-cpus = 2
-memory_mb = 4096
-storage_mb = 10240
-gpus = 0
-allow_internet = false
+# TODO(pre-submission): pin the digest after `docker push` (…@sha256:<digest>)
+docker_image      = "<registry>/<path>/<owner>__<repo>-<slug>:latest"
+os                = "linux"
+cpus              = 2
+memory_mb         = 4096
+storage_mb        = 10240
+gpus              = 0
+gpu_types         = []
+build_timeout_sec = 1800
+workdir           = "/testbed"
+network_mode      = "no-network"
+allowed_hosts     = []
+
+[agent]
+timeout_sec = 3600
+
+[verifier]
+timeout_sec = 1800
+
+[solution]
+# solution/solve.sh applies solution/golden.patch
+
+[metadata]
+repo                   = "<owner>/<repo>"
+base_commit            = "<BASE_SHA>"            # pre-fix parent for PR/commit/issue tasks
+source_type            = "PR-based"              # PR-based | commit-based | issue-based | derivation | net-new
+difficulty             = "hard"                  # medium | hard
+difficulty_explanation = "<why it's hard: reasoning/cross-module/subtlety/domain>"
+category               = "<e.g. Software Engineering>"
+subcategory            = "<e.g. Feature implementation>"
+objective_labels       = ["Implement"]          # multi-label
+artifact_labels        = ["Codebase"]           # multi-label
+num_f2p_tests          = 0                       # set to the real count (target 10–20)
+# TODO(pre-submission): fill measured pass@8 after eval
+# pass_at_k_gpt_5_5    = "x/8"
+# pass_at_k_opus_4_8   = "x/8"
 ```
 
 ### environment/Dockerfile (shape — adapt base image + dep install per language)
@@ -174,7 +224,7 @@ RUN git -C /testbed add -A \
 CMD ["bash"]
 ```
 
-### tests/test.sh (shape — adapt restored test paths + run command)
+### tests/test.sh (shape — embeds the test patch inline; adapt restored paths + run cmd)
 
 ```bash
 #!/bin/bash
@@ -189,29 +239,34 @@ cd /testbed || fail
 rm -rf /testbed/<TESTDIR>
 cp -a /opt/baseline/<TESTDIR> /testbed/<TESTDIR>
 
-# 2) Apply the hidden fail2pass / pass2pass test patch.
-git apply --whitespace=nowarn /tests/test_patch.diff || \
-  patch -p1 --fuzz=5 < /tests/test_patch.diff || fail
+# 2) Apply the hidden NEW fail2pass TEST patch (embedded inline so the shipped tests/
+#    folder stays within the 3-file limit). Keep the markers verbatim.
+cat > /tmp/test_patch.diff << '__TEST_PATCH_EOF__'
+<contents of the test-only diff verbatim (~10–20 NEW F2P incl. a behavior-reproducing case)>
+__TEST_PATCH_EOF__
+git apply --whitespace=nowarn /tmp/test_patch.diff || \
+  patch -p1 --fuzz=5 < /tmp/test_patch.diff || fail
 
-# 3) Run affected suites OFFLINE (fail2pass + pass2pass).
-<OFFLINE RUN COMMAND FROM SPEC>
+# 3) Run OFFLINE: the NEW fail2pass tests AND a relevant subset of the repo's EXISTING
+#    tests (pass2pass regression guard — already in the image, not re-authored).
+<OFFLINE RUN COMMAND FROM SPEC: new F2P tests + existing pass2pass subset>
 status=$?
 
 [ "$status" -eq 0 ] && pass || fail
 ```
 
-### solution/solve.sh (shape — embed gold inline, apply)
+### solution/solve.sh (shape — embed golden inline, apply)
 
 ```bash
 #!/bin/bash
 set -euo pipefail
 cd /testbed
 
-cat > /tmp/gold_patch.diff << '__GOLD_PATCH_EOF__'
-<contents of solution/gold_patch.diff verbatim>
+cat > /tmp/golden.patch << '__GOLD_PATCH_EOF__'
+<contents of solution/golden.patch verbatim>
 __GOLD_PATCH_EOF__
 
-git apply --whitespace=nowarn /tmp/gold_patch.diff || patch -p1 --fuzz=5 < /tmp/gold_patch.diff
+git apply --whitespace=nowarn /tmp/golden.patch || patch -p1 --fuzz=5 < /tmp/golden.patch
 echo "Applied golden patch."
 ```
 
@@ -243,17 +298,20 @@ no "where to look".
 Use `scripts/verify.sh` (set its `ROOT` to the task set, or pass it). It checks,
 **against each task's own base_commit** (worktree if the clone HEAD differs):
 
-- gold_patch applies — OK
-- test_patch applies — OK
+- golden.patch applies — OK
+- the test patch embedded in tests/test.sh applies — OK (extracted from the heredoc)
 - both together apply — OK
-- gold = source-only (a `WARN: gold may touch tests` that fires only because a
+- golden = source-only (a `WARN: gold may touch tests` that fires only because a
   SOURCE filename/path contains "Test"/"spec" — e.g. `ParameterizedTest.java`,
   `src/TestFramework/…` — is a false positive; confirm the `+++ b/` targets are
   production source)
 - clone left clean (0 dirty lines)
 
-Also confirm by eye: instruction.md leaks nothing; Dockerfile `REPO_SHA` ==
-`base_commit` == spec SHA; the 7 files exist and scripts are executable.
+Also confirm by eye: instruction.md (and environment/problem_statement.md) leak
+nothing; task.toml `[metadata]` has source_type + category/subcategory + labels +
+difficulty; Dockerfile `REPO_SHA` == `base_commit` == spec SHA; the 7 files exist and
+scripts are executable. Deep verifier/leakage QA is the `harbor-verifier-check` /
+`harbor-task-sanity-check` skills' job.
 
 ```bash
 bash scripts/verify.sh <S> [<S2> ...]
@@ -263,7 +321,8 @@ bash scripts/verify.sh $(ls -1 <root>/harbor_tasks | grep -v '^_')
 
 ## Final report (per task or batch)
 
-Repo URL + base SHA; module/toolchain + base image; source files changed + LoC;
-test files + count of new fail2pass cases; the three apply-checks pass against the
-base SHA; clone clean; the offline run command; and a one-line fail2pass rationale
-(why the new tests fail pre-fix and pass post-fix).
+Repo URL + base SHA (+ source_type); category/subcategory + difficulty;
+module/toolchain + base image; source files changed + LoC (avg ~350); count of NEW
+fail2pass cases (target 10–20) + the existing tests used as pass2pass; the three
+apply-checks pass against the base SHA; clone clean; the offline run command; and a
+one-line fail2pass rationale (why the new tests fail pre-fix and pass post-fix).

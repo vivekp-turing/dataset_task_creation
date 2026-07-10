@@ -8,12 +8,17 @@ claim in real files from the repo's `repo_summary.md` + cloned source.
 ```markdown
 # Task Spec — <repo>: <short, specific task title>
 
+**Source idea:** repo_summary "Difficult Task Ideas" #<N> — spec rank #<M> of 3 (hardest-first)
 **Repo:** `<owner/repo>` (<language>, <version/branch + pinned SHA/tag>, <1 key note>)
-**Difficulty target:** **Hard** (frontier solve < 50%)   <!-- or Medium, with rationale -->
+**Difficulty target:** **Hard** (Opus 4.8 / GPT-5.5 solve ≤ 2/8)  <!-- or Medium ≤ 4/8, with rationale -->
 **Type:** bug-fix | feature implementation | bug-fix + small feature
-**Originality:** net-new feature | real edge-case gap | seeded regression — <one line
-proving it vs source, e.g. "grep: no `of S` nth-child variant at SHA abc123">
-**Patch size:** ~<N> LoC across <M> files
+**Source type:** PR-based | commit-based | issue-based | derivation | net-new —
+<one-line proof vs source, e.g. "pre-fix parent SHA abc123; grep: `of S` nth-child
+variant absent". PR-based ⇒ golden matches the canonical upstream fix; net-new < 50%
+overall.>
+**Category / Subcategory:** <e.g. Software Engineering / Feature implementation>
+**Objective labels:** <e.g. Implement, Fix>   **Artifact labels:** <e.g. Codebase>
+**Patch size:** ~<N> LoC (avg target ~350; 150–800) across <M> files
 **Offline:** yes (<test runner / how it stays offline>)
 
 ## One-line
@@ -33,9 +38,11 @@ statement. Be concrete about the edge cases / interactions that matter.>
 3. **<Non-local invariant / state / lifecycle>** — <the conservation/ordering/state
    property that's easy to violate>.
 4. **<Adversarial matrix>** — <the product of cases partial fixes miss>.
-5. **<Contamination control>** — <why this is novel, not a public issue>.
+5. **<Deep domain knowledge>** — <framework/protocol/library internals a generalist
+   lacks>.
 <Optionally a 6th. End with an honest line: getting all of this right is author-level
-hard / would require iterating against tests.>
+hard / would require iterating against tests — and a note that it is FAIR (not vague,
+not a chain of unrelated changes; a correct golden of the stated size exists).>
 
 ## Golden patch — feasibility & approach
 
@@ -46,26 +53,35 @@ upstream behavior / naive recompute.>
 - <File 3 / types / template>: <the change>.
 - Keep <invariant/ordering/security guard> intact.
 
-Golden patch lives in `solution/` and touches: `<file>`, `<file>`, `<file>`.
+Golden patch lives in `solution/golden.patch` and touches: `<file>`, `<file>`, `<file>`.
 
 ## fail2pass test strategy (deterministic, offline)
 
-<Where tests live + harness style.>
+<Where tests live + harness style. You author a COMPREHENSIVE NEW suite: ~10–20 F2P
+tests (min 10) to prevent reward hacking. Tests assert observable behavior/outcome —
+never the file edited, diff shape, or source keywords — and are independent of the
+reference solution.>
 
-1. **<Primary fail2pass>** — <exact assertions: exact output / paired diffs /
+1. **<Behavior-reproducing case>** — fails pre-fix, passes post-fix (the new
+   capability/bug the task is about).
+2. **<Core fail2pass cases>** — <exact assertions: exact output / paired diffs /
    round-trip / schema equality>. Covers <the key combinations>.
-2. **<Edge cases>** — <list the hard combinations the matrix demands>.
-3. **<Optional model-based / property test>** — <reference vs implementation>.
-4. **pass2pass** — <existing tests that must stay green> (proves no regression).
+3. **<Edge-case matrix>** — <the hard combinations partial fixes miss>.
+4. **<Optional model-based / property test>** — <reference vs implementation>.
 
-<Smallest run command, fully offline.>
+**Pass2pass (existing suite — do NOT author new p2p):** <name the repo's existing
+tests / subset that must stay green after the gold patch — the regression guard>.
+
+<Smallest run command, fully offline: runs the new F2P suite + the relevant existing
+tests. Note the ~F2P count.>
 
 ## Files touched (estimate)
 
 - `<path>` (~<x> LoC: <what>)
 - `<path>` (~<x> LoC: <what>)
 - `<path>` (~<x> LoC: <what>)
-- tests (fail2pass, not counted in patch)
+- <sum ≈ 350 LoC in the 150–800 band across multiple files>
+- tests (~10–20 fail2pass, not counted in patch)
 
 ## Harbor / image notes
 
@@ -89,17 +105,22 @@ Golden patch lives in `solution/` and touches: `<file>`, `<file>`, `<file>`.
 - **Title** = repo + the specific behavior, e.g. "recharts: stacked + offset bar
   layout with `minPointSize` sign-correctness across mixed-sign stacks". Specific,
   not "fix bar bug".
-- **Difficulty target** is a claim you must justify in "Why it is hard". Default to
-  **Hard**; only mark Medium if a frontier model would plausibly hit ~50%.
-- **Originality** must be one of the three patterns AND proven against the cloned
-  source at the pinned SHA (grep the API/method/option). Never base it on a real
-  public issue/PR (leakage + the snapshot may already include or postdate the fix).
-  If the subsystem is already correct, use the **seeded-regression** pattern and say
-  so — the `environment/` will ship the bug, the gold patch restores correctness.
+- **Difficulty target** is a claim you must justify in "Why it is hard" (grounded in
+  reasoning/cross-module/domain complexity). Default to **Hard** (≤2/8); only mark
+  **Medium** (≤4/8) if a frontier model would plausibly hit that band.
+- **Source type** must be declared AND proven against the cloned source at the pinned
+  base SHA. Prefer **PR/commit/issue-based** (net-new stays < 50%); for those, pin the
+  **pre-fix parent** so the deliverable is absent at baseline and make the golden
+  match the **canonical upstream fix**. For net-new/edge-case, grep to confirm the
+  capability/edge is absent. **Seeded regression** is a last resort (say so; the
+  `environment/` ships the bug, the gold patch restores correctness).
+- **Category/subcategory + labels** are required metadata (they flow into
+  `task.toml`); pick the category matching the dominant work.
 - **Header `Offline: yes`** must say *how* (runner + why no network) — this is the
   containerization gate.
-- **Golden + tests are mandatory.** If either section is vague, you picked the wrong
-  surface — go back to Step 3 and pick another.
+- **Golden + comprehensive tests are mandatory.** If either section is vague, or you
+  can't see ~10–20 real F2P assertions, you picked the wrong surface — go back to
+  Step 3.
 - **Problem statement** is the only part that becomes user-visible (the eventual
   `instruction.md` seed). Treat it like a Deep-SWE prompt: behavior-focused,
   slightly underspecified, zero verifier leakage.

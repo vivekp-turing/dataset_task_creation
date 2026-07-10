@@ -3,7 +3,8 @@
 metadata spreadsheet, filtered against the task requirements.
 
 The output is a list of distinct repositories (deduped, one row per repo) that are
-good candidates for authoring ORIGINAL tasks. It is NOT a list of tasks to reuse.
+good candidates for authoring tasks (PR/commit/issue-based, derivations, or net-new;
+net-new < 50% overall). It selects REPOS, not a fixed list of tasks.
 
 Usage examples:
   # 15 repos each for the top-4 task-spec language groups -> 60 total
@@ -146,12 +147,13 @@ def main():
     ap.add_argument("--lang-counts", default=None,
                     help="Per-group counts, e.g. 'JS/TS=20,Python=15'. Overrides --languages/--per-language")
     # Quality filters (all tunable; defaults match the task spec)
-    ap.add_argument("--min-instance-loc", type=int, default=60)
-    ap.add_argument("--max-instance-loc", type=int, default=350)
-    ap.add_argument("--target-instance-loc", type=int, default=160,
-                    help="Sweet spot for ~100 LoC multi-file patches")
-    ap.add_argument("--min-f2p", type=int, default=3,
-                    help="Minimum fail2pass test count")
+    ap.add_argument("--min-instance-loc", type=int, default=150)
+    ap.add_argument("--max-instance-loc", type=int, default=800)
+    ap.add_argument("--target-instance-loc", type=int, default=350,
+                    help="Sweet spot for ~350 LoC (avg) multi-file patches")
+    ap.add_argument("--min-f2p", type=int, default=5,
+                    help="Minimum upstream fail2pass count (signal that a repo "
+                         "supports the authored target of ~10-20 F2P tests)")
     ap.add_argument("--min-stars", type=int, default=250)
     ap.add_argument("--max-repo-loc", type=int, default=2_000_000)
     ap.add_argument("--allow-loc-sentinel", action="store_true",

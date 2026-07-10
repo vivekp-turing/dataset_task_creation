@@ -57,13 +57,20 @@ service/Docker**. Distinguish unit vs integration explicitly.}
 5. Smallest verify command (a single offline-safe test target).
 6. Suggested base image.
 
-## Good Surfaces for Original Tasks
-{8-14 numbered items. Each: implementation file(s) + existing test file(s) that
-anchor fail2pass + a ~100-LoC task idea + (feature | bug-fix) + (offline-safe | needs
-X). Favor pure-logic, well-tested, offline surfaces.}
+## Difficult Task Ideas
+{EXACTLY 5-6 numbered items, RANKED hardest-first (#1 = hardest). Each: implementation
+file(s) + existing test file(s) that anchor fail2pass + an avg-~350-LoC (≈150–800)
+task idea + a one-line **why it's hard** + a **difficulty target** (Hard ≤2/8 |
+Medium ≤4/8) + (feature | bug-fix) + taxonomy category + source type (net-new gap |
+real PR/commit/issue) + (offline-safe | needs X). Favor genuinely hard, pure-logic,
+well-tested, offline surfaces; difficulty must come from reasoning/cross-module/
+subtle-behavior/domain, not vagueness or chaining unrelated changes.}
 
-1. **{area}** — `path/impl`, `path/test`. {Task idea}. (feature, offline-safe)
+1. **{area}** — `path/impl`, `path/test`. {Task idea}. *Why hard:* {reasoning/
+   cross-module/subtle behavior/domain}. Target: **Hard ≤2/8**. (feature, Software
+   Engineering, net-new gap, offline-safe)
 2. ...
+6. ...
 
 ## Risks / Gotchas
 {Numbered pitfalls: huge build, native/platform deps, display/GPU/live-service

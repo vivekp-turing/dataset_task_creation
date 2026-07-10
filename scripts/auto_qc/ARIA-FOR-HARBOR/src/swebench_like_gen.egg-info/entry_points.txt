@@ -1,0 +1,4 @@
+[console_scripts]
+annotate-dataset = swebench_like_gen.cli:annotate_dataset_entry
+annotate-one = swebench_like_gen.cli:annotate_one_entry
+swebench-like-gen = swebench_like_gen.cli:main

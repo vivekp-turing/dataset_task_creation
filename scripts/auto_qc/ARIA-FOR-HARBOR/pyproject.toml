@@ -1,0 +1,21 @@
+[project]
+name = "swebench-like-gen"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "google-api-python-client>=2.197.0",
+    "google-auth>=2.55.0",
+    "pydantic>=2.13.4",
+    "pydantic-ai>=2.0.0",
+    "typer>=0.26.7",
+]
+
+[project.scripts]
+annotate-one = "swebench_like_gen.cli:annotate_one_entry"
+annotate-dataset = "swebench_like_gen.cli:annotate_dataset_entry"
+swebench-like-gen = "swebench_like_gen.cli:main"
+
+[tool.uv]
+package = true
