@@ -83,14 +83,22 @@ flowchart TD
     C <--> D[5-6 ranked difficult task ideas<br/>per repo]
     D --> E[Phase 3 · task specs<br/>top 3 ideas ⇒ task_spec_1..3.md]
     E --> F[Phase 4 · build a Harbor task<br/>per spec]
-    F --> G[Phase 5 · cheap-model difficulty filter<br/>Sonnet 5 pass@1 · Claude Code<br/>solved ⇒ too easy ⇒ drop]
+    F --> G[Phase 5 · cheap-model difficulty filter<br/>Sonnet 5 pass@1 · Claude Code<br/>solved ⇒ too easy]
     G --> H[Phase 6 · Auto QC<br/>ARIA 8-rubric quality + difficulty<br/>accept/reject · skill: auto-qc]
     H --> I[Phase 7 · pass@8 evals<br/>Opus 4.8 · Claude Code + Daytona<br/>GPT-5.5 · Codex + Daytona]
+    G -.too easy.-> Z1[identify_hardening_levers<br/>diagnose + hardness_levers.md]
+    I -.above band.-> Z1
+    Z1 --> Z2[implement_hardening_levers<br/>dose top-ROI levers ⇒ harder v2]
+    Z2 -.harder v2.-> F
+    H -.quality reject.-> Q[auto_quality_fix<br/>triage + fix flagged rubrics<br/>≤3 loops with Auto-QC]
+    Q -.fixed.-> H
 ```
 
 Phases 1–4 are automated by the skills in this repo. Phase 5 is a cheap pre-filter, Phase
 6 is the automated Auto-QC (ARIA) pass, and Phase 7 is the final pass@8 benchmark that
-fills the `pass_at_k_*` metadata.
+fills the `pass_at_k_*` metadata. When Phase 5 or 7 flags a task as too easy, the hardening
+loop (`identify_hardening_levers` → `implement_hardening_levers`) diagnoses why and rebuilds
+a harder version that re-enters at Phase 4.
 
 ---
 
@@ -202,14 +210,15 @@ actually hard. Run a **single attempt (pass@1)** of the built task through the *
 eval harness with the Claude Code agent on Claude Sonnet 5**.
 
 - If **Sonnet 5 solves the task** (reward = 1), it is **not difficult** — such a task
-  will almost certainly be solved by Opus 4.8 / GPT-5.5, so **drop it** (or send it back
-  to Phase 3/4 to be hardened).
+  will almost certainly be solved by Opus 4.8 / GPT-5.5, so **harden it** with the
+  hardening loop (see below) — `identify_hardening_levers` → `implement_hardening_levers` — or drop it.
 - If **Sonnet 5 fails**, the task survives to Auto QC and the full pass@8 benchmark.
 
 This mirrors the requirements' guidance to use a cheaper model for an initial difficulty
 assessment before the expensive frontier-model runs. Save the pass@1 results
 (`.jsonl`/`.json`/per-task dir) — Phase 6's Auto-QC folds them in as a difficulty signal
-via `--prefilter`.
+via `--prefilter`, and the hardening skill reads them (plus the trajectory) to diagnose
+*why* a task was easy.
 
 ### Phase 6 — Auto QC  ·  skill: [`auto-qc`](skills/auto-qc/)
 
@@ -251,6 +260,16 @@ build+apply+test check is `task_spec_to_harbor_task/scripts/verify.sh`) and is a
 not a substitute for human QA on borderline tasks. Only accepted tasks proceed to the
 final benchmark. See `skills/auto-qc/SKILL.md` and `scripts/auto_qc/README.md` for detail.
 
+**Quality-fix loop  ·  skill: [`auto_quality_fix`](skills/auto_quality_fix/).** When
+Auto-QC **rejects** a task on quality, this skill repairs it to an accept. It reads the
+`autoqc/<slug>.autoqc.json` failing gates (and optionally the Phase-5/7 eval evidence),
+first **triages fixability** — a structurally-invalid or intrinsically-unfair task is
+flagged up front with the reason + a human-fix/reject recommendation and *not* looped
+(saving QC cost) — then applies targeted, **requirement-preserving** fixes to the flagged
+rubrics (per `rubric_fix_playbook.md`), re-runs Auto-QC, and loops until accepted, **capped
+at 3 iterations** (stop early on accept). A pure `difficulty_concern` flag is not a quality
+problem — that goes to the hardening loop, not here.
+
 ### Phase 7 — Final pass@8 benchmark  ·  Opus 4.8 (Claude Code) + GPT-5.5 (Codex) via Daytona
 
 Establish and record the official difficulty by running **pass@8** in each model's native
@@ -269,8 +288,32 @@ pass_at_k_gpt_5_5  = "x/8"   # Codex + GPT-5.5
 
 Classify by the worse (higher) of the two solve rates against the bands: **Medium** if
 either harness solves `≤ 4/8`, **Hard** if either solves `≤ 2/8`. Tasks that don't warrant
-their difficulty tier are hardened (back to Phase 3/4) and re-benchmarked; the surviving,
-correctly-classified tasks are shippable.
+their difficulty tier are sent through the hardening loop below and re-benchmarked; the
+surviving, correctly-classified tasks are shippable.
+
+### Hardening loop  ·  skills: [`identify_hardening_levers`](skills/identify_hardening_levers/) → [`implement_hardening_levers`](skills/implement_hardening_levers/)
+
+Whenever **Phase 5** (Sonnet 5 solves at pass@1) or **Phase 7** (Opus 4.8 / GPT-5.5 solve
+above the band) shows a task is too easy, a two-skill loop turns it into a harder one,
+driven by the eval evidence — a diagnosis skill and a "hardness doctor" implementation
+skill:
+
+1. **`identify_hardening_levers` — diagnose + prescribe.** From the eval results +
+   trajectories, work out *why* it's easy (single obvious fix, leaked/over-specified
+   instruction, weak/holey verifier, too-small scope, contamination, or a copyable
+   analogue), with `step_id`-cited evidence, then write a per-task
+   `tasks/<slug>/hardness_levers.md` — an **ROI-ranked** menu of task-specific levers, each
+   with its concrete change, why it's hard, what it touches (instruction / tests / golden),
+   a requirements + quality-rubric safety check (test↔issue alignment, coverage,
+   fairness/realism, not underspecified, no over-strict/false-negative tests, no leakage),
+   and a predicted pass@8 impact. It does not modify the task.
+2. **`implement_hardening_levers` — dose the cure.** Reads the prescription, sizes the
+   **gap** to the target band, and applies the **smallest top-ROI subset** of levers needed
+   (not all of them) to a new version (`<task>_v2`, never in place) — cascading edits across
+   instruction → tests → golden so they stay consistent. It validates both directions
+   (golden still passes; the previously-easy fix now fails), re-runs Phase 5 → 6 → 7, and
+   titrates (add the next lever only if still too easy; back off if it became unfair) until
+   the task is in-band, fair, and still solvable.
 
 ---
 
@@ -283,6 +326,10 @@ correctly-classified tasks are shippable.
 | `skills/task-spec-creation/` | Phase 3 — select the top 3 hardest ideas per repo and write `task_spec_{1,2,3}.md`. |
 | `skills/task_spec_to_harbor_task/` | Phase 4 — build one complete Harbor task from each `task_spec_N.md` + repo clone. |
 | `skills/auto-qc/` | Phase 6 — accept/reject gate combining ARIA 8-rubric quality + cheap-model difficulty pre-filter. |
+| `skills/auto_quality_fix/` | Phase 6 fix loop — triage fixability, then repair rejected rubrics (requirement-preserving) and re-run Auto-QC until accepted, capped at 3 iterations. |
+| `skills/identify_hardening_levers/` | Hardening loop (diagnose) — find *why* a too-easy task is easy (Phase 5/7 signals) and write the ROI-ranked `hardness_levers.md` prescription. |
+| `skills/implement_hardening_levers/` | Hardening loop (treat) — dose the smallest top-ROI lever subset from `hardness_levers.md`, cascade edits across instruction/tests/golden, and re-eval. |
+| `skills/eval-trajectory-failure-analysis/` | Trajectory + failure-mode post-mortem of harbor eval trials; used by the hardening loop to diagnose *why* a task was easy. |
 | `scripts/auto_qc/auto_qc.py` | Phase 6 orchestrator the `auto-qc` skill drives (runs ARIA per task + folds in the pre-filter). |
 | `scripts/auto_qc/ARIA-FOR-HARBOR/` | Vendored ARIA-for-Harbor annotation pipeline the orchestrator calls. |
 | `scripts/tag_task.py` | Category/subcategory/language tagging for a task (LLM judge over the taxonomy). |
