@@ -29,9 +29,9 @@ that would make it genuinely hard. The single deliverable is a per-task
 
 This is the **diagnosis half of the hardening loop**. It does **not** touch the task; the
 sibling **[`implement_hardening_levers`](../implement_hardening_levers/)** skill reads this
-spec and administers the minimal cure. Together they are the concrete tool for what the
-pipeline README calls "harden (back to Phase 3/4)": this skill runs after **Phase 5**
-(cheap-model filter) or **Phase 7** (pass@8 benchmark) whenever a task misses its band.
+spec and administers the minimal cure. Together they are the pipeline's **hardening loop**:
+this skill runs after **Phase 5** (cheap-model filter) or **Phase 7** (pass@8 benchmark)
+whenever a task misses its band, and the rebuilt harder version re-enters at **Phase 5**.
 
 ## The bar you're hardening toward (from the requirements)
 

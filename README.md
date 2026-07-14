@@ -86,10 +86,12 @@ flowchart TD
     F --> G[Phase 5 · cheap-model difficulty filter<br/>Sonnet 5 pass@1 · Claude Code<br/>solved ⇒ too easy]
     G --> H[Phase 6 · Auto QC<br/>ARIA 8-rubric quality + difficulty<br/>accept/reject · skill: auto-qc]
     H --> I[Phase 7 · pass@8 evals<br/>Opus 4.8 · Claude Code + Daytona<br/>GPT-5.5 · Codex + Daytona]
+    I -->|accepted| HR[Human review]
+    HR --> PK[Packaging]
     G -.too easy.-> Z1[identify_hardening_levers<br/>diagnose + hardness_levers.md]
-    I -.above band.-> Z1
+    I -.rejected.-> Z1
     Z1 --> Z2[implement_hardening_levers<br/>dose top-ROI levers ⇒ harder v2]
-    Z2 -.harder v2.-> F
+    Z2 -.harder v2.-> G
     H -.quality reject.-> Q[auto_quality_fix<br/>triage + fix flagged rubrics<br/>≤3 loops with Auto-QC]
     Q -.fixed.-> H
 ```
@@ -98,7 +100,8 @@ Phases 1–4 are automated by the skills in this repo. Phase 5 is a cheap pre-fi
 6 is the automated Auto-QC (ARIA) pass, and Phase 7 is the final pass@8 benchmark that
 fills the `pass_at_k_*` metadata. When Phase 5 or 7 flags a task as too easy, the hardening
 loop (`identify_hardening_levers` → `implement_hardening_levers`) diagnoses why and rebuilds
-a harder version that re-enters at Phase 4.
+a harder version that re-enters at Phase 5. Tasks accepted at Phase 7 go to **human review**
+and then **packaging**.
 
 ---
 
@@ -288,8 +291,8 @@ pass_at_k_gpt_5_5  = "x/8"   # Codex + GPT-5.5
 
 Classify by the worse (higher) of the two solve rates against the bands: **Medium** if
 either harness solves `≤ 4/8`, **Hard** if either solves `≤ 2/8`. Tasks that don't warrant
-their difficulty tier are sent through the hardening loop below and re-benchmarked; the
-surviving, correctly-classified tasks are shippable.
+their difficulty tier are sent through the hardening loop below and re-benchmarked. Tasks
+that pass go to **human review** and then **packaging** for delivery.
 
 ### Hardening loop  ·  skills: [`identify_hardening_levers`](skills/identify_hardening_levers/) → [`implement_hardening_levers`](skills/implement_hardening_levers/)
 
