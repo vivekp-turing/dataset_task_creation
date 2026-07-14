@@ -78,12 +78,15 @@ tooling/harnesses described below.
 
 ```mermaid
 flowchart TD
-    A[Turing-approved repos<br/>docs/turing_approved_repos.txt] --> B[Phase 1 · select seed repos<br/>by LoC, language, difficulty,<br/>code type — approved only]
-    B --> C[Phase 2 · explore repos]
-    C <--> D[5-6 ranked difficult task ideas<br/>per repo]
-    D --> E[Phase 3 · task specs<br/>top 3 ideas ⇒ task_spec_1..3.md]
-    E --> F[Phase 4 · build a Harbor task<br/>per spec]
-    F --> G[Phase 5 · cheap-model difficulty filter<br/>Sonnet 5 pass@1 · Claude Code<br/>solved ⇒ too easy]
+    subgraph CORE[" "]
+        direction TB
+        A[Turing-approved repos<br/>docs/turing_approved_repos.txt] --> B[Phase 1 · select seed repos<br/>by LoC, language, difficulty,<br/>code type — approved only]
+        B --> C[Phase 2 · explore repos + produce<br/>5-6 ranked difficult task ideas per repo]
+        C --> E[Phase 3 · task specs<br/>top 3 ideas ⇒ task_spec_1..3.md]
+        E --> F[Phase 4 · build a Harbor task<br/>per spec]
+        F --> G[Phase 5 · cheap-model difficulty filter<br/>Sonnet 5 pass@1 · Claude Code<br/>solved ⇒ too easy]
+    end
+    style CORE fill:none,stroke:none
     G --> H[Phase 6 · Auto QC<br/>ARIA 8-rubric quality + difficulty<br/>accept/reject · skill: auto-qc]
     H --> I[Phase 7 · pass@8 evals<br/>Opus 4.8 · Claude Code + Daytona<br/>GPT-5.5 · Codex + Daytona]
     I -->|accepted| HR[Human review]
