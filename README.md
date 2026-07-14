@@ -77,33 +77,35 @@ tooling/harnesses described below.
 ## Workflow
 
 ```mermaid
-%%{init: {"flowchart": {"curve": "basis", "nodeSpacing": 45, "rankSpacing": 50}}}%%
+%%{init: {"flowchart": {"curve": "basis", "nodeSpacing": 50, "rankSpacing": 55}}}%%
 flowchart TB
-    A[Turing-approved repos<br/>docs/turing_approved_repos.txt]
-    P1[Phase 1 · select seed repos<br/>approved repos only]
-    P2[Phase 2 · explore each repo<br/>produce 5-6 ranked difficult task ideas]
-    P3[Phase 3 · create task specs<br/>top 3 ideas ⇒ task_spec_1..3.md]
-    P4[Phase 4 · build one Harbor task<br/>per task spec]
-    P5[Phase 5 · cheap-model filter<br/>Sonnet 5 pass@1 · Claude Code]
-    P6[Phase 6 · Auto-QC<br/>ARIA quality + difficulty gate]
-    P7[Phase 7 · pass@8 evals<br/>Opus 4.8 + Claude Code · GPT-5.5 + Codex<br/>Daytona]
+    A[Turing-approved<br/>repos]
+    P1[Phase 1<br/>Select seed repos]
+    P2[Phase 2<br/>Explore repos]
+    D[5-6 ranked<br/>task ideas / repo]
+    P3[Phase 3<br/>Write task specs]
+    P4[Phase 4<br/>Build Harbor task]
+    P5[Phase 5<br/>Cheap-model filter]
+    P6[Phase 6<br/>Auto-QC]
+    P7[Phase 7<br/>pass@8 evals]
     HR[Human review]
     PK[Packaging]
-    RJ[Reject task]
-    HD[Hardening loop<br/>identify levers → implement top-ROI subset]
-    QF[Quality-fix loop<br/>triage + fix flagged rubrics<br/>maximum 3 attempts]
+    QF[auto_quality_fix<br/>fix rubrics · max 3]
+    IH[identify_<br/>hardening_levers]
+    MH[implement_<br/>hardening_levers]
+    RJ(( )):::hidden
 
-    A --> P1 --> P2 --> P3 --> P4 --> P5
-    P5 -->|passed| P6
-    P6 -->|accepted| P7
-    P7 -->|accepted| HR --> PK
+    A --> P1 --> P2 --> D --> P3 --> P4 --> P5 --> P6 --> P7 --> HR --> PK
+
+    QF -.->|fixed| P6
+    P6 -.->|quality rejected| QF
+
+    P5 -.->|too easy| IH --> MH
+    MH -.->|harder v2| P5
+
     P7 -->|rejected| RJ
 
-    P5 -.->|too easy| HD
-    HD -.->|hardened · retry| P5
-
-    P6 -.->|quality rejected| QF
-    QF -.->|fixed · rerun| P6
+    classDef hidden fill:transparent,stroke:transparent,color:transparent;
 ```
 
 Phases 1–4 are automated by the skills in this repo. Phase 5 is a cheap pre-filter, Phase
