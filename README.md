@@ -77,26 +77,30 @@ tooling/harnesses described below.
 ## Workflow
 
 ```mermaid
-flowchart TD
-    subgraph CORE[" "]
-        direction TB
-        A[Turing-approved repos<br/>docs/turing_approved_repos.txt] --> B[Phase 1 · select seed repos<br/>by LoC, language, difficulty,<br/>code type — approved only]
-        B --> C[Phase 2 · explore repos + produce<br/>5-6 ranked difficult task ideas per repo]
-        C --> E[Phase 3 · task specs<br/>top 3 ideas ⇒ task_spec_1..3.md]
-        E --> F[Phase 4 · build a Harbor task<br/>per spec]
-        F --> G[Phase 5 · cheap-model difficulty filter<br/>Sonnet 5 pass@1 · Claude Code<br/>solved ⇒ too easy]
-    end
-    style CORE fill:none,stroke:none
-    G --> H[Phase 6 · Auto QC<br/>ARIA 8-rubric quality + difficulty<br/>accept/reject · skill: auto-qc]
-    H --> I[Phase 7 · pass@8 evals<br/>Opus 4.8 · Claude Code + Daytona<br/>GPT-5.5 · Codex + Daytona]
-    I -->|accepted| HR[Human review]
-    HR --> PK[Packaging]
-    G -.too easy.-> Z1[identify_hardening_levers<br/>diagnose + hardness_levers.md]
-    I -.rejected.-> Z1
-    Z1 --> Z2[implement_hardening_levers<br/>dose top-ROI levers ⇒ harder v2]
-    Z2 -.harder v2.-> G
-    H -.quality reject.-> Q[auto_quality_fix<br/>triage + fix flagged rubrics<br/>≤3 loops with Auto-QC]
-    Q -.fixed.-> H
+%%{init: {"flowchart": {"curve": "basis", "nodeSpacing": 55, "rankSpacing": 55}}}%%
+flowchart TB
+    A[Turing-approved repos<br/>docs/turing_approved_repos.txt]
+    P1[Phase 1 · select seed repos<br/>approved repos only]
+    P2[Phase 2 · explore each repo<br/>produce 5-6 ranked difficult task ideas]
+    P3[Phase 3 · create task specs<br/>top 3 ideas ⇒ task_spec_1..3.md]
+    P4[Phase 4 · build one Harbor task<br/>per task spec]
+    P5[Phase 5 · cheap-model filter<br/>Sonnet 5 pass@1 · Claude Code]
+    P6[Phase 6 · Auto-QC<br/>ARIA quality + difficulty gate]
+    P7[Phase 7 · pass@8 evals<br/>Opus 4.8 + Claude Code · GPT-5.5 + Codex<br/>Daytona]
+    HR[Human review]
+    PK[Packaging]
+
+    A --> P1 --> P2 --> P3 --> P4 --> P5
+    P5 -->|passed| P6
+    P6 -->|accepted| P7
+    P7 -->|accepted| HR --> PK
+
+    P6 -->|quality rejected| QF[Quality-fix loop<br/>triage + fix flagged rubrics<br/>rerun Auto-QC · maximum 3 attempts]
+    QF -->|fixed| P6
+
+    P5 -->|too easy| HD[Hardening loop<br/>identify levers → implement top-ROI subset]
+    P7 -->|rejected| HD
+    HD -->|harder version · retry| P5
 ```
 
 Phases 1–4 are automated by the skills in this repo. Phase 5 is a cheap pre-filter, Phase
