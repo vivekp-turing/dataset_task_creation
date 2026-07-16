@@ -49,22 +49,29 @@ For each task:
 
 ### Quality rubrics
 
-Each task is scored on eight rubrics (0 = best, 3 = worst), aligned with the dataset
+Each task is scored on nine rubrics (0 = best, 3 = worst), aligned with the dataset
 task-quality bar:
 
 1. `issue_clarity` — is the problem statement clear and unambiguous?
 2. `gold_patch_clarity` — is the reference solution readable?
 3. `gold_patch_to_issue_alignment` — does the patch address exactly the issue (no bundling/chaining)?
 4. `test_clarity` — are the tests understandable and free of hidden assertions?
-5. `test_to_issue_alignment` — do the F2P tests validate what the issue requires (FP/FN)?
+5. `test_to_issue_alignment` — do the F2P tests validate what the issue requires?
 6. `fairness` — is the task solvable from public information alone?
 7. `instruction_leakage` — does the instruction over-specify or leak the fix, files, algorithm,
    or hidden test details (unless present in the original upstream issue)?
-8. `test_robustness` — are the tests comprehensive (~10-20 F2P), behaviour-based, regression-
-   backed, and resistant to reward hacking (no structural/keyword checks, no solution coupling)?
+8. `test_false_negatives` — do the tests wrongly REJECT valid solutions (over-strict / pin one
+   implementation)?
+9. `test_false_positives` — can a non-fix / gamed solution PASS (thin, structural, or
+   solution-coupled tests)? (behaviour-based, regression-backed, reward-hacking-resistant = 0)
 
-A task is rejected if any rubric ≥ 2, if two or more rubrics ≥ 1, on the alignment/clarity/
-test-alignment hard gates, if fairness is `Unfair`, or if instruction-leakage or test-robustness ≥ 2.
+A task is accepted iff none of `issue_clarity` / `test_to_issue_alignment` /
+`test_false_negatives` / `test_false_positives` / `fairness` scores ≥ 2, at most two of those
+four test/fairness rubrics score 1, and `instruction_leakage` is within tolerance. The leakage
+tolerance is set per invocation via `--leakage-max` (default 0 = must be leak-free; the Auto-QC
+orchestrator passes `1` for the stricter Opus judge and `0` for the lenient Kimi judge; a score
+≥ 2 always rejects). `gold_patch_clarity`, `gold_patch_to_issue_alignment`, and `test_clarity`
+are scored for information but do not gate.
 
 ## Setup
 

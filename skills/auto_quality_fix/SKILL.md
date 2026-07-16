@@ -4,11 +4,12 @@ description: >-
   Fix a Harbor (SWE-Bench-style fail2pass) task that the Phase-6 Auto-QC (ARIA) pipeline
   REJECTED on quality, and drive it to an ACCEPT — in a capped feedback loop with the
   pipeline. Reads the auto-qc output (autoqc/<slug>.autoqc.json: failing gates, reasons,
-  flags, the eight rubric scores, fairness verdict) and optionally the Phase-5 (Sonnet 5)
+  flags, the nine rubric scores, fairness verdict) and optionally the Phase-5 (Sonnet 5)
   or Phase-7 eval outputs + trajectories, first TRIAGES whether the task is fixable, and if
   so applies targeted, requirement-preserving fixes to the flagged rubrics (issue clarity,
   gold-patch clarity, gold-patch↔issue alignment, test clarity, test↔issue alignment,
-  fairness, instruction leakage, test robustness), re-runs auto-qc, and loops until the task
+  fairness, instruction leakage, test false negatives, test false positives), re-runs
+  auto-qc, and loops until the task
   is accepted — MAX 3 iterations (stop early on accept) to cap cost. If the task is
   unfixable, it flags that up front with the reason + what an expert human could do or
   whether to reject, and ends without burning QC runs. Task requirements are non-negotiable
@@ -25,8 +26,8 @@ loop (≤ 3 iterations)**. Before spending any QC runs, decide whether the task 
 **fixable**; if it isn't, say so up front with a reason and a recommendation, and stop.
 
 This is the remediation counterpart to **[`auto-qc`](../auto-qc/)** (Phase 6): auto-qc
-*judges*, this skill *repairs to a pass*. It targets the **quality gate** (the eight ARIA
-rubrics + fairness). A pure **difficulty** flag (`difficulty_concern` — cheap model solved
+*judges*, this skill *repairs to a pass*. It targets the **quality gate** (the nine ARIA
+rubrics). A pure **difficulty** flag (`difficulty_concern` — cheap model solved
 it) is not a quality problem; that's the hardening loop
 (**[`identify_hardening_levers`](../identify_hardening_levers/)** →
 **[`implement_hardening_levers`](../implement_hardening_levers/)**), not this skill.
@@ -52,7 +53,7 @@ it) is not a quality problem; that's the hardening loop
   `environment/{Dockerfile,problem_statement.md}`, `solution/{golden.patch,solve.sh}`,
   `tests/test.sh`).
 - **Required — the Phase-6 auto-qc output** for it: `autoqc/<slug>.autoqc.json` (final
-  verdict, **failing gates**, reasons, flags, the eight rubric scores, fairness verdict)
+  verdict, **failing gates**, reasons, flags, the nine rubric scores, fairness verdict)
   and the raw `aria/markdown/<slug>.md` for the per-rubric rationale. This is the diagnosis
   you fix against.
 - **Optional — eval evidence:** Phase-5 (Sonnet 5 pass@1) or Phase-7 (Opus 4.8 / GPT-5.5
@@ -129,9 +130,9 @@ requirement guardrails. Key discipline:
   Fixing `*_to_issue_alignment` may mean editing the statement to cover behavior the golden
   really implements (without leaking) OR trimming out-of-scope changes from the golden/tests
   — and if the golden's scope changes, the tests follow, and vice-versa. Fixing
-  `test_robustness`/`test_clarity` rebuilds the embedded F2P patch in `tests/test.sh`; if a
-  new fair assertion exposes a gap, extend the **golden** to satisfy it (never weaken a test
-  to fit a thin golden).
+  `test_false_positives`/`test_false_negatives`/`test_clarity` rebuilds the embedded F2P
+  patch in `tests/test.sh`; if a new fair assertion exposes a gap, extend the **golden** to
+  satisfy it (never weaken a test to fit a thin golden).
 - **Validate locally before re-running QC** (cheaper than a QC run): apply
   `solution/golden.patch` → verifier passes; confirm the F2P fail on baseline; run
   `../task_spec_to_harbor_task/scripts/verify.sh <slug>` (source-only golden, patches apply

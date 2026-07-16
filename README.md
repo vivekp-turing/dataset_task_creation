@@ -265,24 +265,36 @@ via `--prefilter`, and the hardening skill reads them (plus the trajectory) to d
 Gate each surviving Harbor task **accept/reject** with the `auto-qc` skill, which
 combines two signals into one verdict:
 
-1. **Quality (primary gate)** — the vendored **ARIA-for-Harbor** pipeline scores the task
-   on eight quality rubrics: `issue_clarity`, `gold_patch_clarity`,
-   `gold_patch_to_issue_alignment`, `test_clarity`, `test_to_issue_alignment`,
-   `fairness`, `instruction_leakage`, and `test_robustness`. Any failing gate → reject.
+1. **Quality (primary gate, two LLM judges)** — the vendored **ARIA-for-Harbor** pipeline
+   is run by **two independent judges** — **Opus 4.8** (`anthropic:claude-opus-4-8`, via the
+   Anthropic API) and **Kimi K2.7 Code** (`openrouter:moonshotai/kimi-k2.7-code`, via
+   OpenRouter) — each scoring the task on nine quality rubrics: `issue_clarity`,
+   `gold_patch_clarity`, `gold_patch_to_issue_alignment`, `test_clarity`,
+   `test_to_issue_alignment`, `fairness`, `instruction_leakage`, `test_false_negatives`
+   (tests wrongly reject valid solutions), and `test_false_positives` (tests wrongly accept
+   invalid/gamed solutions). A judge **accepts** iff none of `issue_clarity` /
+   `test_to_issue_alignment` / `test_false_negatives` / `test_false_positives` / `fairness`
+   is ≥ 2, at most 2 of those four test/fairness rubrics score 1, and `instruction_leakage`
+   is within that judge's tolerance — **asymmetric**: the stricter judge (opus) tolerates a
+   minor leak (`≤ 1`) while the lenient judge (kimi) must be leak-free (`= 0`); a significant
+   leak (`≥ 2`) rejects for either. The judges are merged into one verdict; by default
+   (`--judge-agreement all`) a task is rejected if **either** judge fails a gate (use `any`
+   to accept if either accepts).
 2. **Difficulty (modulates an accepted task)** — the optional Phase 5 cheap-model
    pass@1 results, passed via `--prefilter`. A task the cheap model already solves is
    flagged `difficulty_concern` (or rejected under `--strict-difficulty`).
 
 The skill drives everything through the orchestrator at `scripts/auto_qc/auto_qc.py`
-(which runs `uv run annotate-one` inside `ARIA-FOR-HARBOR/` per task):
+(which runs `uv run annotate-one --model <judge>` inside `ARIA-FOR-HARBOR/` once per judge
+per task):
 
 ```bash
-# one-time: sync the ARIA env + set a provider key
-cd scripts/auto_qc/ARIA-FOR-HARBOR && uv sync   # + export ANTHROPIC_API_KEY (or .env)
+# one-time: sync the ARIA env + set BOTH judge provider keys
+cd scripts/auto_qc/ARIA-FOR-HARBOR && uv sync   # + export ANTHROPIC_API_KEY and OPENROUTER_API_KEY (or .env)
 
 cd scripts/auto_qc
 
-# QC one task
+# QC one task (two default judges: opus + kimi)
 python auto_qc.py <path>/harbor_tasks/<task-slug> --output-dir out
 
 # QC a batch, folding in the Phase 5 Sonnet 5 pass@1 pre-filter
@@ -293,8 +305,10 @@ python auto_qc.py <path>/harbor_tasks --prefilter <results/> --strict-difficulty
 ```
 
 Outputs land under `--output-dir`: a per-task `autoqc/<slug>.autoqc.json` (final verdict,
-reasons, flags, all 8 rubric scores, difficulty signal), an `auto_qc_summary.{json,csv}`
-table, and the raw ARIA annotation under `aria/`. Note Auto-QC is an **LLM annotation** of
+reasons, flags, merged rubric scores, and a per-judge `quality.judges` block with each
+judge's own verdict + 9 rubric scores, difficulty signal), an `auto_qc_summary.{json,csv}`
+table (merged columns plus per-judge `<name>_verdict/_score/_rubric_*` columns), and each
+judge's raw ARIA annotation under `aria/<judge>/`. Note Auto-QC is an **LLM annotation** of
 the instruction/patch/tests — it never runs the Docker verifier (that deterministic
 build+apply+test check is `task_spec_to_harbor_task/scripts/verify.sh`) and is a screen,
 not a substitute for human QA on borderline tasks. Only accepted tasks proceed to the

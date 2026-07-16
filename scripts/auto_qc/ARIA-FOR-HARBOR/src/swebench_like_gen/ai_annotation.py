@@ -45,7 +45,11 @@ class AnnotationOutput(BaseModel):
     test_to_issue_alignment: TestAlignmentEntry
     fairness: RubricEntry
     instruction_leakage: RubricEntry
-    test_robustness: RubricEntry
+    # Test quality is split into two independent axes:
+    #   test_false_negatives — tests wrongly REJECT valid solutions (over-strict).
+    #   test_false_positives — tests wrongly ACCEPT invalid solutions (gameable).
+    test_false_negatives: RubricEntry
+    test_false_positives: RubricEntry
     is_hint_needed: bool
     hint_reasoning: str
     hint_value: str
@@ -110,13 +114,13 @@ For each verdict also note:
 
 
 ANNOTATION_SYSTEM_PROMPT = """\
-You are an expert AI judge scoring a sourced software task on eight quality rubrics.
+You are an expert AI judge scoring a sourced software task on nine quality rubrics.
 Lower scores are better (0 = best, 3 = worst).
 
 These rubrics encode the task-quality bar for this dataset: tasks must be fair,
-clearly specified without leaking the solution, and guarded by a comprehensive,
-reward-hacking-resistant test suite (the target is ~10-20 fail-to-pass tests that
-verify observable behaviour).
+clearly specified without leaking the solution, and guarded by a comprehensive
+test suite that neither wrongly rejects valid solutions (false negatives) nor lets
+invalid/gamed solutions pass (false positives).
 
 You are given the public instruction/problem statement, hints, gold patch, hidden test patch,
 extracted F2P/P2P tests, the Harbor verifier script, and a fairness analysis summary from a prior
@@ -220,9 +224,29 @@ Strict rules (first match wins):
 Reasoning must quote the specific leaking sentence/phrase from the instruction (or confirm none
 exists) and say whether it was plausibly in the original issue.
 
-**8. TEST ROBUSTNESS** (0-3): Are the F2P tests comprehensive and resistant to reward hacking?
-Tests must verify observable behaviour by executing code, be hard to game, and be independent of
-the reference solution. The dataset target is a comprehensive suite (~10-20 F2P tests).
+**8. TEST FALSE NEGATIVES — Inability to Accept Valid Solutions** (0-3): Do the F2P tests
+wrongly REJECT valid solutions by over-specifying or pinning one particular implementation?
+A correct implementation of the behaviour the issue requires should pass regardless of how it
+is written.
+- 0 = None: any reasonable correct implementation passes; tests assert observable behaviour,
+  not one specific implementation.
+- 1 = Minor: slight over-specification (e.g. an exact message string or output format) that
+  most valid solutions would still satisfy.
+- 2 = Significant: tests pin internal details or one particular implementation, so plausible
+  valid solutions would fail.
+- 3 = Severe: tests are so coupled to the gold patch that essentially only the reference
+  implementation passes.
+
+Strict rules (first match wins):
+- A test asserts an exact internal value/structure only the gold patch produces → score >= 2.
+- A test hard-codes an implementation choice the issue does not require → score >= 2.
+
+Reasoning must name at least one specific F2P test and state whether an alternative correct
+solution would pass it, and if not, exactly what over-specific assertion blocks it.
+
+**9. TEST FALSE POSITIVES — Ability to Catch Invalid Solutions** (0-3): Can a non-fix or gamed
+solution PASS the F2P tests? Tests must verify observable behaviour by executing code, be hard
+to game, and be independent of the reference solution.
 - 0 = Robust: comprehensive behavioural coverage, includes a regression that reproduces the
   issue, executes real code paths, and cannot be passed by special-casing or hardcoding.
 - 1 = Adequate: mostly behavioural and reasonably comprehensive, minor coverage gaps.
@@ -238,9 +262,9 @@ Strict rules (first match wins):
 - A single narrow assertion guards a multi-part behavioural change (reward-hacking risk) → score >= 2.
 - Coverage is materially thinner than the behaviours the issue requires → score >= 2.
 
-Reasoning must reference specific tests and state (a) roughly how many F2P tests exist vs. the
-behaviours required, (b) whether a regression test reproducing the issue is present, and
-(c) whether any assertion is structural/gameable or solution-dependent.
+Reasoning must reference specific tests and state (a) whether a regression test reproducing the
+issue is present, (b) whether any assertion is structural/gameable or solution-dependent, and
+(c) whether a plausible non-fix could pass the suite.
 
 **HINT ASSESSMENT**: After scoring, assess whether engineers need an additional hint:
 - `is_hint_needed`: true if the task has clarity gaps that a targeted hint could remedy
@@ -252,18 +276,32 @@ behaviours required, (b) whether a regression test reproducing the issue is pres
 """
 
 
-REJECT_SCORE_THRESHOLD = 2
-REJECT_COUNT_THRESHOLD = 2
-ALIGNMENT_HARD_GATE = 1
-GATE_LINES = (
-    "Any single rubric score >= 2.",
-    "Two or more rubric scores >= 1.",
-    "Gold Patch ↔ Issue Alignment >= 1.",
-    "Test Clarity >= 2.",
-    "Test ↔ Issue Alignment >= 2.",
-    "Fairness analysis determined task is Unfair.",
-    "Instruction Leakage >= 2 (solution/files/tests leaked).",
-    "Test Robustness >= 2 (thin or reward-hackable tests).",
+REJECT_SCORE_THRESHOLD = 2  # any gating rubric scoring >= 2 rejects
+MAX_ONES = 2                # at most this many of the core test/fairness rubrics may score 1
+
+# Human-readable labels for the gating rubrics.
+RUBRIC_LABELS = {
+    "issue_clarity": "Issue Clarity",
+    "test_to_issue_alignment": "Test ↔ Issue Alignment",
+    "test_false_negatives": "Test False Negatives (inability to accept valid solutions)",
+    "test_false_positives": "Test False Positives (ability to catch invalid solutions)",
+    "fairness": "Task Fairness",
+    "instruction_leakage": "Solution/Instruction Leakage",
+}
+# These must each score < 2 (a >= 2 on any of them rejects).
+HARD_GATE_KEYS = (
+    "issue_clarity",
+    "test_to_issue_alignment",
+    "test_false_negatives",
+    "test_false_positives",
+    "fairness",
+)
+# At most MAX_ONES of these four may score exactly 1 (3+ ones rejects).
+ONES_GATE_KEYS = (
+    "test_to_issue_alignment",
+    "test_false_negatives",
+    "test_false_positives",
+    "fairness",
 )
 BOLD_RE = re.compile(r"\*\*([^*]+)\*\*")
 
@@ -315,7 +353,7 @@ def build_annotation_prompt(
             f"=== HIDDEN TEST PATCH ===\n{task.test_patch}",
             f"=== VERIFIER SCRIPT ===\n{task.test_script}",
             f"=== PRIOR FAIRNESS ANALYSIS ===\n{fairness_summary or '(not available)'}",
-            "Score this task on the six rubrics and assess the hint requirement.",
+            "Score this task on the nine rubrics and assess the hint requirement.",
         ]
     )
 
@@ -345,31 +383,53 @@ def rubric_scores(annotation: AnnotationOutput) -> list[int]:
         annotation.test_to_issue_alignment.score,
         annotation.fairness.score,
         annotation.instruction_leakage.score,
-        annotation.test_robustness.score,
+        annotation.test_false_negatives.score,
+        annotation.test_false_positives.score,
     ]
 
 
 def annotation_decision(
-    annotation: AnnotationOutput, fairness_verdict: str
+    annotation: AnnotationOutput, fairness_verdict: str, leakage_max: int = 0
 ) -> tuple[str, list[str]]:
-    scores = rubric_scores(annotation)
+    """Accept iff the task clears every gate below.
+
+    Gates (per the acceptance criteria):
+      1. None of {Issue Clarity, Test↔Issue Alignment, Test False Negatives,
+         Test False Positives, Task Fairness} scores >= 2.
+      2. At most MAX_ONES of {Test↔Issue Alignment, Test False Negatives,
+         Test False Positives, Task Fairness} score exactly 1.
+      3. Solution/Instruction Leakage <= ``leakage_max`` (default 0).
+
+    ``leakage_max`` is set per judge by the orchestrator: the stricter judge
+    (Opus 4.8) tolerates a *minor* leak (``leakage_max=1``) because it tends to
+    over-flag, while the more lenient judge (Kimi K2.7) must see none
+    (``leakage_max=0``) — if even the lenient judge detects leakage, it's real.
+    A significant leak (score >= 2) rejects for either judge.
+
+    Gold Patch Clarity, Gold Patch↔Issue Alignment and Test Clarity are scored for
+    information but do not gate. The binary fairness pipeline (``fairness_verdict``)
+    is likewise informational here; the 0-3 Task Fairness rubric is the gate.
+    """
     reasons: list[str] = []
-    if any(score >= REJECT_SCORE_THRESHOLD for score in scores):
-        reasons.append(GATE_LINES[0])
-    if sum(1 for score in scores if score >= 1) >= REJECT_COUNT_THRESHOLD:
-        reasons.append(GATE_LINES[1])
-    if annotation.gold_patch_to_issue_alignment.score >= ALIGNMENT_HARD_GATE:
-        reasons.append(GATE_LINES[2])
-    if annotation.test_clarity.score >= REJECT_SCORE_THRESHOLD:
-        reasons.append(GATE_LINES[3])
-    if annotation.test_to_issue_alignment.score >= REJECT_SCORE_THRESHOLD:
-        reasons.append(GATE_LINES[4])
-    if fairness_verdict == "Unfair":
-        reasons.append(GATE_LINES[5])
-    if annotation.instruction_leakage.score >= REJECT_SCORE_THRESHOLD:
-        reasons.append(GATE_LINES[6])
-    if annotation.test_robustness.score >= REJECT_SCORE_THRESHOLD:
-        reasons.append(GATE_LINES[7])
+
+    for key in HARD_GATE_KEYS:
+        if getattr(annotation, key).score >= REJECT_SCORE_THRESHOLD:
+            reasons.append(f"{RUBRIC_LABELS[key]} >= {REJECT_SCORE_THRESHOLD}.")
+
+    ones = sum(1 for key in ONES_GATE_KEYS if getattr(annotation, key).score == 1)
+    if ones > MAX_ONES:
+        core = ", ".join(RUBRIC_LABELS[k] for k in ONES_GATE_KEYS)
+        reasons.append(
+            f"More than {MAX_ONES} of ({core}) scored 1 ({ones} did)."
+        )
+
+    if annotation.instruction_leakage.score > leakage_max:
+        allowed = "must be 0" if leakage_max == 0 else f"must be <= {leakage_max}"
+        reasons.append(
+            f"Solution/Instruction Leakage = {annotation.instruction_leakage.score} "
+            f"({allowed} for this judge)."
+        )
+
     return ("reject" if reasons else "accept", reasons)
 
 
@@ -415,7 +475,8 @@ def render_annotation_report(
         "Test ↔ Issue Alignment": annotation.test_to_issue_alignment,
         "Fairness": annotation.fairness,
         "Instruction Leakage": annotation.instruction_leakage,
-        "Test Robustness": annotation.test_robustness,
+        "Test False Negatives (accepts valid?)": annotation.test_false_negatives,
+        "Test False Positives (catches invalid?)": annotation.test_false_positives,
     }
     lines = [
         f"## Annotation Rubrics — {task_label}",
@@ -445,14 +506,15 @@ def render_annotation_report(
 
 
 class AiAnnotationService:
-    def __init__(self, model: str) -> None:
+    def __init__(self, model: str, leakage_max: int = 0) -> None:
         self.model = model
+        self.leakage_max = leakage_max
 
     def run(self, task: HarborTask, grading: GradingTestsOutput) -> AnnotationResult:
         fairness = self.run_fairness(task, grading)
         annotation = self.run_annotation(task, grading, fairness)
         final_verdict, rejection_reasons = annotation_decision(
-            annotation, fairness.overall_verdict
+            annotation, fairness.overall_verdict, self.leakage_max
         )
         score = rubric_score(annotation)
         fairness_report = render_fairness_report(fairness, task.instance_id)

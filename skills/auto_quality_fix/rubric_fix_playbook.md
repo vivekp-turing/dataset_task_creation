@@ -1,16 +1,24 @@
 # Rubric-fix playbook
 
 How to repair each Auto-QC (ARIA) rubric failure **without breaking a task requirement**.
-Scores are `0` (best) → `3` (worst). The pipeline **rejects** when any of these gates trip:
+Scores are `0` (best) → `3` (worst). Each judge **rejects** when any of these gates trip:
 
-> any rubric ≥ 2 · two or more rubrics ≥ 1 · `gold_patch_to_issue_alignment` ≥ 1 ·
-> `test_clarity` ≥ 2 · `test_to_issue_alignment` ≥ 2 · `fairness` = Unfair ·
-> `instruction_leakage` ≥ 2 · `test_robustness` ≥ 2
+> any of {`issue_clarity`, `test_to_issue_alignment`, `test_false_negatives`,
+> `test_false_positives`, `fairness`} ≥ 2 · 3 or more of
+> {`test_to_issue_alignment`, `test_false_negatives`, `test_false_positives`, `fairness`}
+> score 1 · `instruction_leakage` above the judge's tolerance (lenient judge = 0, strict
+> judge ≤ 1; ≥ 2 rejects either)
 
-So the target is **every rubric ≤ 1, alignment = 0, and no two rubrics ≥ 1** — reached by
-fixing the *substance*, never by wording the annotator into a pass. For each rubric below:
-what a bad score means → the requirement-preserving fix → what it forces you to touch →
-the guardrail (so the fix doesn't trip another gate or a requirement).
+Because acceptance needs **both** judges to pass and the lenient judge (Kimi) tolerates
+**no** leakage, the safe fix target is `instruction_leakage = 0`.
+
+So the target is: **each of those five core rubrics ≤ 1, at most two of the four
+test/fairness rubrics at 1, and leakage = 0** — reached by fixing the *substance*, never by
+wording the annotator into a pass. `gold_patch_clarity`, `gold_patch_to_issue_alignment`,
+and `test_clarity` are scored for information but do **not** gate (still fix them if they
+signal a real problem — a weak golden or confusing tests usually drags a gating rubric too).
+For each rubric below: what a bad score means → the requirement-preserving fix → what it
+forces you to touch → the guardrail (so the fix doesn't trip another gate or a requirement).
 
 Read the `aria/markdown/<slug>.md` rationale for the *specific* reason a rubric scored high;
 fix that concrete reason, not the generic category.
@@ -34,7 +42,7 @@ fix that concrete reason, not the generic category.
   ~350 LoC, multi-file, source-only. Don't shrink it below the band or drop required changes.
   If you remove an edit, make sure no F2P test depended on it.
 
-## `gold_patch_to_issue_alignment` — golden does things the issue doesn't imply, or misses parts (gate: ≥ 1)
+## `gold_patch_to_issue_alignment` — golden does things the issue doesn't imply, or misses parts (info only, non-gating)
 - **Fix (two directions):**
   - *Golden does extra* → trim out-of-scope changes so every edit is relevant to and
     permitted by the stated problem (No-unnecessary-changes requirement).
@@ -43,10 +51,11 @@ fix that concrete reason, not the generic category.
     golden is fully implied — without leaking how to implement it.
 - **Touches:** `solution/golden.patch` and/or the statement; keep **tests** in sync with
   whichever way you move.
-- **Guardrail:** this gate is strict (≥ 1 fails) — aim for `0`. Widening the statement must
-  not leak; trimming the golden must not drop behavior the F2P assert.
+- **Guardrail:** although this rubric no longer gates directly, misalignment almost always
+  drags `test_to_issue_alignment` or the false-negative/positive rubrics — aim for `0`.
+  Widening the statement must not leak; trimming the golden must not drop behavior the F2P assert.
 
-## `test_clarity` — the tests are confusing/poorly structured (gate: ≥ 2)
+## `test_clarity` — the tests are confusing/poorly structured (info only, non-gating)
 - **Fix:** clear test/case names tied to the behavior; one behavior per case; explicit
   expected values; remove dead/commented asserts; deterministic setup.
 - **Touches:** the F2P patch embedded in `tests/test.sh` (rebuild: edit tests in clone →
@@ -65,7 +74,7 @@ fix that concrete reason, not the generic category.
 - **Guardrail:** every assertion maps inputs→expected correctly and is derivable from the
   issue/docs/upstream; stay in the 10–20 F2P band; don't couple to the reference solution.
 
-## `fairness` — the task is unfair (verdict: Unfair)
+## `fairness` — the task is unfair (gate: ≥ 2 on the 0-3 rubric)
 - **Fix:** make expected outputs **derivable** from the issue/docs/upstream (add the missing
   spec reference or example of the required output structure to the statement if applicable);
   remove any need for privileged knowledge (verifier internals, unknowable exact shapes);
@@ -76,7 +85,7 @@ fix that concrete reason, not the generic category.
   the behavior, this is a **triage-unfixable** case — flag it, don't invent requirements.
   Adding a spec reference must not become a fix hint (leakage).
 
-## `instruction_leakage` — the statement reveals files/root cause/fix/tests (gate: ≥ 2)
+## `instruction_leakage` — the statement reveals files/root cause/fix/tests (gate: per-judge — lenient judge needs 0, strict ≤ 1; aim for 0)
 - **Fix:** strip "Where to look: [files]", the root cause, the intended fix/algorithm,
   function names to edit, and any hidden-test detail — **unless it was in the original
   upstream issue**. Restate as behavior + success criteria only.
@@ -84,17 +93,28 @@ fix that concrete reason, not the generic category.
 - **Guardrail:** don't over-strip into ambiguity (that raises `issue_clarity`). De-leak,
   don't obscure — a capable engineer must still find the surface.
 
-## `test_robustness` — tests are reward-hackable / weak / solution-coupled (gate: ≥ 2)
+## `test_false_positives` — tests are reward-hackable / weak / solution-coupled, so a non-fix can pass (gate: ≥ 2)
 - **Fix:** make assertions **outcome-based** (execute code, check behavior/final state) —
   never diff shape, line numbers, or source-keyword matching; add adversarial + edge cases so
-  a naive/partial fix fails; ensure a **comprehensive ~10–20 F2P** suite incl. the regression
-  case; restore test dirs + any ground-truth from the pristine `/opt/baseline` before grading
+  a naive/partial fix fails; ensure a **comprehensive F2P** suite incl. the regression case;
+  restore test dirs + any ground-truth from the pristine `/opt/baseline` before grading
   (anti-tamper); make sure tests don't import/call the reference solution.
 - **Touches:** the F2P patch in `tests/test.sh` (and the restore/anti-tamper block); extend
   the **golden** if a new adversarial assert exposes a real gap.
-- **Guardrail:** keep deterministic + offline + fast-enough; **no false negatives** — the
-  golden and other legitimate correct solutions must still pass. Growing robustness may also
-  raise difficulty — fine, as long as it stays in band and fair.
+- **Guardrail:** keep deterministic + offline + fast-enough; do **not** over-tighten into
+  false negatives (see below) — the golden and other legitimate correct solutions must still
+  pass. Growing robustness may also raise difficulty — fine, as long as it stays in band and fair.
+
+## `test_false_negatives` — tests wrongly REJECT valid solutions (over-strict / pin one implementation) (gate: ≥ 2)
+- **Fix:** loosen assertions that pin an internal detail or a single implementation the issue
+  never mandates; assert the **observable behaviour / contract** (return value, error, final
+  state) rather than exact internal shapes, private field names, log strings, or call order;
+  where a format genuinely matters, assert it as an explicit, spec-derivable requirement.
+- **Touches:** the F2P patch in `tests/test.sh`; occasionally the **statement** (if a format
+  really is required, state it as a requirement so the assertion is fair rather than dropped).
+- **Guardrail:** loosening must not create false positives (`test_false_positives`) — keep the
+  behavioural core that a real fix must satisfy. Verify at least one alternative correct
+  implementation would now pass, while the baseline still fails and the golden still passes.
 
 ---
 

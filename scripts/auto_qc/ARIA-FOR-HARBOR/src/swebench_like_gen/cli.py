@@ -52,6 +52,13 @@ def annotate_one(
     output_dir: Annotated[
         Path, typer.Option(help="Directory for JSON/CSV/Markdown outputs.")
     ] = DEFAULT_OUTPUT_DIR,
+    leakage_max: Annotated[
+        int,
+        typer.Option(
+            help="Max acceptable instruction_leakage score for this judge "
+            "(0 = strict/must-be-0; 1 = tolerate a minor leak). Score >= 2 always rejects."
+        ),
+    ] = 0,
 ) -> None:
     task = load_harbor_task(task_dir)
     typer.echo(f"Extracting grading tests for {task.task_slug}...")
@@ -63,7 +70,7 @@ def annotate_one(
     typer.echo(test_count_message)
 
     typer.echo(f"Annotating {task.task_slug}...")
-    result = AiAnnotationService(model).run(task, grading)
+    result = AiAnnotationService(model, leakage_max=leakage_max).run(task, grading)
     payload = write_task_outputs(task, grading, result, output_dir)
     json_path = output_dir / "json" / f"{task.task_slug}.json"
     row = csv_row(
