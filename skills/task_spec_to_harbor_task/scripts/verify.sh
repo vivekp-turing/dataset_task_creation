@@ -4,8 +4,8 @@
 #   and clones/). Defaults below; override via env: ROOT=/path verify.sh <slug>
 #
 # Verifies each task's patches apply against the task's OWN base_commit (not the
-# clone HEAD, which may differ for pre-fix-parent tasks), checks source/test
-# separation, and confirms the clone is left clean.
+# clone HEAD, which may differ when a task pins a specific base SHA), checks
+# source/test separation, and confirms the clone is left clean.
 ROOT="${ROOT:-/path/to/your/task_set/initial_task_list}"
 
 verify(){ s=$1; echo "===== $s ====="

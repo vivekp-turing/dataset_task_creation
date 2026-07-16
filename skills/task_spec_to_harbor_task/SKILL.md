@@ -4,37 +4,36 @@ description: >-
   Convert a SWE-Bench-style task spec (task_spec.md + a pinned repo
   clone) into ONE complete, runnable Harbor-format task folder — instruction.md,
   task.toml, environment/{Dockerfile,problem_statement.md},
-  solution/{golden.patch,solve.sh}, tests/test.sh — with a real source-only golden
-  patch (avg ~350 LoC, multi-file) and a comprehensive NEW fail2pass verifier (~10-20
-  F2P tests; the repo's existing suite is the pass2pass guard, not re-authored) that
+  solution/{golden.patch,solve.sh}, tests/test.sh — with a real new golden
+  patch and a comprehensive NEW fail2pass verifier (atleast >5 F2P tests; the repo's existing suite is the pass2pass guard, not re-authored) that
   grades offline by writing a 0/1 reward. task.toml [metadata] carries
   the category/subcategory + objective/artifact labels + source_type + difficulty.
   Use when asked to build/create a Harbor task (or batch of tasks) from task specs, to
   author the golden solution + verifier tests, or to verify that such Harbor tasks
-  apply cleanly and are non-leaking. Do NOT use the harbor-long-range-task-create skill
-  for this — that is for long-horizon LLM-judge tasks, not SWE-Bench fail2pass tasks.
+  apply cleanly and are non-leaking. These are net new category of tasks, so these are 
+  brand new tasks for which task specs have been created. So the harbor format task is brand new.
+  A task requirements file will be optionally provided to give the requirements of these net
+  new tasks, make sure those requirements are strictly adhered to when creating the harbor
+  format tasks, in additional to the general task requirements mentioned below.
 ---
 
 # Task spec → Harbor task
 
 Convert ONE task spec into ONE complete, correct Harbor SWE-Bench-style task
 folder. For a batch, repeat per slug. The golden solution is a real source patch
-(avg ~350 LoC across multiple files, matching the canonical upstream fix for
-PR/commit/issue-based tasks); the verifier is a **comprehensive suite of NEW
-fail2pass tests (~10–20 F2P, including one that reproduces the target behavior)**
+matching the task requirements as provided. The verifier is a **comprehensive suite of NEW
+fail2pass tests (>5 F2P, including one that reproduces the target behavior)**
 that **fails on baseline, passes after the gold patch**, graded **offline**. The
 repo's **existing** tests are the **pass2pass** guard (already in the image — run a
 relevant subset for regression; do NOT author new pass2pass tests).
 
-This is NOT the long-range/LLM-judge Harbor format. Do not invoke
-`harbor-long-range-task-create`. There is no LLM judge — grading is a single
-deterministic test run that writes `0` or `1` to `/logs/verifier/reward.txt`.
+Grading is a single deterministic test run that writes `0` or `1` to `/logs/verifier/reward.txt`.
 
 ## Inputs (per task slug `<S>`)
 
 - Spec: `<root>/tasks/<S>/task_spec.md` — authoritative. Source of: pinned base
   SHA, source_type, category/subcategory + objective/artifact labels, golden approach
-  + the exact source files it touches, the fail2pass matrix (~10–20 F2P), the offline
+  + the exact source files it touches, the fail2pass matrix (atleast >5 F2P), the offline
   run command, image/toolchain notes, a non-leaking problem-statement draft, and the
   source-type validity proof.
 - Repo: `<root>/clones/<S>/` — real source. Usually already at the baseline SHA;
@@ -60,7 +59,7 @@ user if ambiguous.
                                   #   (pass2pass) subset offline, writes reward
 ```
 
-This matches the Reflection submission format: `solution/{solve.sh, golden.patch}`,
+This matches the submission format: `solution/{solve.sh, golden.patch}`,
 `environment/{Dockerfile, problem_statement.md}`, and a **`tests/` folder limited to
 at most 3 files** (`grade.py`, `config.json`, `test.sh`). Because the test patch is
 **embedded inline in `test.sh`** (like `solve.sh` embeds the golden), the shipped
@@ -70,15 +69,15 @@ them). Nothing extra inside a task folder. Build/QA helpers (this skill's
 
 ## Hard rules (non-negotiable)
 
-1. **Two cleanly-separated patches.** The golden = source files ONLY (the real
-   fix/feature), saved as `solution/golden.patch`. The test patch = test files ONLY,
+1. **Two cleanly-separated patches.** The golden = source files ONLY 
+   saved as `solution/golden.patch`. The test patch = test files ONLY,
    **embedded inline in `tests/test.sh`**. Build each by editing the clone, then
    `git -C clones/<S> --no-pager diff -- <paths>`, then
    `git -C clones/<S> checkout -- <paths>` to reset. **Never leave the clone dirty.**
 2. **fail2pass is real and comprehensive.** With ONLY the test patch applied (no
    gold), the new tests must FAIL on baseline; with BOTH applied they must PASS. The
-   test patch contains **only NEW F2P tests** — a **comprehensive suite (~10–20, min
-   10)** to prevent reward hacking, including one that reproduces the target behavior.
+   test patch contains **only NEW F2P tests** — a **comprehensive suite (atleast >5, min
+   5)** to prevent reward hacking, including one that reproduces the target behavior.
    **Do NOT author new pass2pass tests:** the repo's **existing** suite is the
    pass2pass guard (already baked into the image) — pick a relevant existing subset
    and run it alongside the new tests so a regression fails grading. Tests must verify
@@ -92,7 +91,7 @@ them). Nothing extra inside a task folder. Build/QA helpers (this skill's
 3. **Pin the baseline SHA from the spec** in the Dockerfile (`REPO_SHA`) and in
    `task.toml` (`base_commit`). Use the real upstream repo URL. For pre-fix-parent
    tasks, use that parent SHA — the SHA where the deliverable is ABSENT.
-4. **Offline at grade time.** Dockerfile may fetch repo + deps at BUILD time;
+4. **Offline at grade and run time.** Dockerfile may fetch repo + deps at BUILD time;
    after that the agent and verifier have no network. Bake a pristine copy to
    `/opt/baseline` and restore the test dir(s) from it before grading
    (anti-tamper — the agent must not be able to weaken the verifier).
@@ -111,6 +110,28 @@ them). Nothing extra inside a task folder. Build/QA helpers (this skill's
 9. **Keep image < 10GB, git dir small** — shallow fetch only (`--depth 1`), no
    full history.
 
+## General Task Requirements (every task created must follow) ##
+
+- **Task statement/description clarity.** Task description must be clear, not too vague. Slightly underspecified
+  is fine, but not too much underspecified. It shouldn't be over specified telling the agent what it should do.
+  Task description/instruction should stick to just a task, like a formal task spec, without "you" or anything of 
+  that sort. Anything that can be inferred from the repo can be avoided in the task instruction. It must be fair,
+  so while it's really difficult, make sure it's a fair task. Don't chain multiple requirements to make it difficult.
+- **Test to task instruction alignment.** Make sure the tests (f2p tests) have high coverage that cover the task requirements
+  really well. Make sure it's aligned with the task instruction and doesn't deviate too much. It's okay to lean on slightly strict
+  tests, but don't make them unfair. Make sure tests don't have false positives or false negatives. Ensure it's not pinned to a
+  very specific implementation, but slightly generic enough to verify multiple implementations. Make sure tests have clarity and 
+  don't cover things that cannot be inferred or derived from the task instruction or the repos. Don't under specify the tests as well,
+  make sure they are comprehensive to prevent reward hacking.
+- **Gold path clarity and alignment.** Make sure the golden patch is aligned well with the task instruction, and actually solves the task
+  and pass all the tests. Make sure the golden patch follows whatever requirements have been provided if they have been provided. 
+  Usually tasks are selected such that golden patch will have certain minimum number of lines of code (LOC) and/or also have
+  minimum number of non test files edited to make the tasks difficult and long horizon. Ensure it's adhered to. Ensure the golden pathc
+  is clear.
+- **Task instruction/description realism and difficulty.** The task should be realistic, something that real 
+  engineers would solve, not some random difficult puzzles. It must be really difficult for leading frontier models, and
+  they are really good. Make sure it's high quality SWE and research based tasks.
+
 ## Workflow (per slug)
 
 ```
@@ -118,9 +139,9 @@ them). Nothing extra inside a task folder. Build/QA helpers (this skill's
       fail2pass matrix, run cmd, image notes)
 - [ ] Confirm repo URL + that clone has the base SHA (git rev-parse / cat-file).
       For PR/commit/issue-based tasks the base SHA is the PRE-FIX PARENT.
-- [ ] Build golden.patch: edit SOURCE in clone → diff → reset clone (avg ~350 LoC,
-      multi-file; match the canonical upstream fix when PR-based)
-- [ ] Build the test patch (~10–20 NEW F2P, incl. a behavior-reproducing case): edit
+- [ ] Build golden.patch: edit SOURCE in clone → diff → reset clone. Make sure it matches
+      the task requirements if provided.
+- [ ] Build the test patch (> 5 NEW F2P, incl. a behavior-reproducing case): edit
       TESTS in clone → diff → reset clone, then embed inline in tests/test.sh. (No new
       pass2pass — pick the existing tests/subset to run for regression.)
 - [ ] Write the 7 files (mirror the reference task; adapt toolchain); fill task.toml
