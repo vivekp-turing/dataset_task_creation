@@ -7,11 +7,14 @@ model of it, ideate a ranked set of hard task surfaces, write specs for the top 
 a Harbor task per spec, then filter/QC/eval each until it is genuinely hard, fair, and
 shippable.
 
-Every task targets a real feature implementation or bug fix with an **average ~350-LoC,
-multi-file gold patch** (≈150–800 LoC), a **comprehensive deterministic offline
-`fail2pass` suite (~10–20 F2P tests)** with the repo's existing suite as the `pass2pass`
-regression guard, a `<100 MB` git image with an offline Docker build, and an **original
-problem** (PR/commit/issue-based, a derivation, or net-new — with net-new kept `<50%`).
+Every task is a **strictly net-new** feature/capability or real edge-case gap — an
+original problem authored from the repo that is **genuinely absent at the pinned base
+SHA** (never derived from an existing PR/commit/issue, and never a seeded regression).
+Each ships a **multi-file gold patch sized to the provided task requirements** (e.g. a
+minimum gold-patch LoC and/or a minimum number of non-test files touched), a
+**comprehensive deterministic offline `fail2pass` suite (>5 F2P tests, min 5)** with the
+repo's existing suite as the `pass2pass` regression guard, and a `<100 MB` git image with
+an offline Docker build.
 
 **Difficulty target (per the requirements): ~50% Medium / ~50% Hard**, measured as
 **pass@8** in the models' native harnesses:
@@ -26,10 +29,12 @@ problem** (PR/commit/issue-based, a derivation, or net-new — with net-new kept
    sign-off applied to `docs/[External] Turing __ ReflectionAi - Swebench custom -
    Repositories list.xlsx`). This is a **hard gate** — a repo that is not on
    `turing_approved_repos.txt` must not be used, no exceptions.
-2. **Task requirements:** the single source of truth is
-   `docs/updated_reflection_reqs_9_july.pdf` (`.docx` mirror alongside it). All
-   difficulty bands, LoC targets, F2P counts, taxonomy/labels, diversity caps,
-   submission format, and quality rules come from that file only.
+2. **Task requirements:** every task must satisfy the **provided task requirements
+   file** (currently `docs/updated_reflection_reqs_9_july.pdf`, `.docx` mirror
+   alongside it). All difficulty bands, gold-patch LoC / non-test-file minimums, the
+   F2P floor, taxonomy/labels, distribution targets, submission format, and quality
+   rules come from that file — swap in a different requirements file and the tasks
+   adhere to it instead.
 
 ---
 
@@ -194,15 +199,16 @@ written against.
   confirming each against the actual cloned source. One idea → one spec; never merge or
   chain ideas. If fewer than 3 are viable/buildable, write only the viable ones and note
   why.
-- **Prove originality** against the pinned SHA and classify the `source_type`
-  (PR-based, commit-based, issue-based, derivation, or net-new — net-new `<50%` overall).
-  For PR/commit/issue tasks pin the **pre-fix parent** so the deliverable is absent at
-  baseline.
-- **Confirm buildability** per spec: an avg-~350-LoC multi-file gold patch is feasible,
-  there's an exact correctness oracle, and a deterministic offline **~10–20 F2P** suite
-  can be written (the repo's existing suite is the `pass2pass` guard).
-- **Assign taxonomy:** category/subcategory + objective/artifact labels from the
-  `updated_reflection_reqs_9_july` taxonomy.
+- **Prove it's net-new** against the pinned base SHA: `source_type = net-new` always —
+  grep/read the source to confirm the capability (or the specific edge/variant) is
+  **genuinely absent** at baseline, so the gold patch adds it. Never derive a task from
+  an existing PR/commit/issue, and never seed a regression.
+- **Confirm buildability** per spec: a multi-file gold patch sized to the task
+  requirements (min LoC / min non-test files) is feasible, there's an exact correctness
+  oracle, and a comprehensive deterministic offline **>5 F2P (min 5)** suite can be
+  written (the repo's existing suite is the `pass2pass` guard).
+- **Assign taxonomy:** category/subcategory + objective/artifact labels, aiming for
+  uniform, diverse coverage across categories (and languages) at the batch level.
 - **Don't leak:** the problem-statement draft describes behavior only — no file lists, no
   test names, no implementation steps, no root-cause/fix hints.
 
@@ -225,8 +231,8 @@ skill at each spec separately). The instruction must **not** leak the verifier. 
   `num_f2p_tests`, and `pass_at_k_*` filled after eval);
 - `environment/` — `Dockerfile` (pins the base SHA, installs deps at build time, bakes a
   pristine `/opt/baseline`) + `problem_statement.md`;
-- `solution/` — `golden.patch` (source-only, avg ~350 LoC, multi-file, matching the
-  canonical upstream fix when PR-based) + `solve.sh`;
+- `solution/` — `golden.patch` (source-only, multi-file, sized to the task
+  requirements' min LoC / non-test-file targets) + `solve.sh`;
 - `tests/` — `test.sh` embedding the hidden **new F2P test patch inline**, restoring
   pristine tests, then running the new F2P + a relevant existing pass2pass subset offline
   and writing a `0`/`1` reward.

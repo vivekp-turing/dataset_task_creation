@@ -11,14 +11,13 @@ claim in real files from the repo's `repo_summary.md` + cloned source.
 **Source idea:** repo_summary "Difficult Task Ideas" #<N> — spec rank #<M> of 3 (hardest-first)
 **Repo:** `<owner/repo>` (<language>, <version/branch + pinned SHA/tag>, <1 key note>)
 **Difficulty target:** **Hard** (Opus 4.8 / GPT-5.5 solve ≤ 2/8)  <!-- or Medium ≤ 4/8, with rationale -->
-**Type:** bug-fix | feature implementation | bug-fix + small feature
-**Source type:** PR-based | commit-based | issue-based | derivation | net-new —
-<one-line proof vs source, e.g. "pre-fix parent SHA abc123; grep: `of S` nth-child
-variant absent". PR-based ⇒ golden matches the canonical upstream fix; net-new < 50%
-overall.>
+**Type:** feature implementation | net-new capability | edge-case handling
+**Source type:** net-new — <one-line proof the capability/edge is ABSENT at the pinned
+base SHA, e.g. "base SHA abc123; grep confirms no `of S` nth-child variant">
 **Category / Subcategory:** <e.g. Software Engineering / Feature implementation>
 **Objective labels:** <e.g. Implement, Fix>   **Artifact labels:** <e.g. Codebase>
-**Patch size:** ~<N> LoC (avg target ~350; 150–800) across <M> files
+**Patch size:** ~<N> LoC across <M> files (meets the provided task requirements — e.g.
+min gold-patch LoC and/or min non-test files touched)
 **Offline:** yes (<test runner / how it stays offline>)
 
 ## One-line
@@ -57,8 +56,8 @@ Golden patch lives in `solution/golden.patch` and touches: `<file>`, `<file>`, `
 
 ## fail2pass test strategy (deterministic, offline)
 
-<Where tests live + harness style. You author a COMPREHENSIVE NEW suite: ~10–20 F2P
-tests (min 10) to prevent reward hacking. Tests assert observable behavior/outcome —
+<Where tests live + harness style. You author a COMPREHENSIVE NEW suite: **>5 F2P
+tests (min 5)** to prevent reward hacking. Tests assert observable behavior/outcome —
 never the file edited, diff shape, or source keywords — and are independent of the
 reference solution.>
 
@@ -80,8 +79,8 @@ tests. Note the ~F2P count.>
 - `<path>` (~<x> LoC: <what>)
 - `<path>` (~<x> LoC: <what>)
 - `<path>` (~<x> LoC: <what>)
-- <sum ≈ 350 LoC in the 150–800 band across multiple files>
-- tests (~10–20 fail2pass, not counted in patch)
+- <sum across multiple files; meets the required min gold-patch LoC / min non-test files>
+- tests (>5 fail2pass, not counted in patch)
 
 ## Harbor / image notes
 
@@ -108,19 +107,18 @@ tests. Note the ~F2P count.>
 - **Difficulty target** is a claim you must justify in "Why it is hard" (grounded in
   reasoning/cross-module/domain complexity). Default to **Hard** (≤2/8); only mark
   **Medium** (≤4/8) if a frontier model would plausibly hit that band.
-- **Source type** must be declared AND proven against the cloned source at the pinned
-  base SHA. Prefer **PR/commit/issue-based** (net-new stays < 50%); for those, pin the
-  **pre-fix parent** so the deliverable is absent at baseline and make the golden
-  match the **canonical upstream fix**. For net-new/edge-case, grep to confirm the
-  capability/edge is absent. **Seeded regression** is a last resort (say so; the
-  `environment/` ships the bug, the gold patch restores correctness).
+- **Source type is always net-new** and must be **proven against the cloned source at
+  the pinned base SHA**: grep/read to confirm the capability (or the specific
+  edge/variant) is **genuinely absent** at baseline, so the gold patch adds it. Do NOT
+  derive tasks from existing PRs/commits/issues or seed a regression. If the capability
+  already exists (the golden would be empty), pick another surface.
 - **Category/subcategory + labels** are required metadata (they flow into
   `task.toml`); pick the category matching the dominant work.
 - **Header `Offline: yes`** must say *how* (runner + why no network) — this is the
   containerization gate.
 - **Golden + comprehensive tests are mandatory.** If either section is vague, or you
-  can't see ~10–20 real F2P assertions, you picked the wrong surface — go back to
-  Step 3.
+  can't see a comprehensive set of real F2P assertions (>5, min 5), you picked the
+  wrong surface — go back to Step 3.
 - **Problem statement** is the only part that becomes user-visible (the eventual
   `instruction.md` seed). Treat it like a Deep-SWE prompt: behavior-focused,
   slightly underspecified, zero verifier leakage.

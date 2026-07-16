@@ -1,4 +1,4 @@
-# Task taxonomy (from the Task-Diversity section of the requirements)
+# Task taxonomy (assign per the provided task requirements)
 
 Assign each task the **single category + subcategory** that best describes the
 **dominant engineering work** required to resolve the issue (choose by the main
@@ -73,13 +73,17 @@ scientific model · Generated output artifact
 
 ## Source type (single)
 
-PR-based · commit-based · issue-based · derivation (of an existing PR) · net-new.
-Keep **net-new < 50%** overall; PR-based golden matches the canonical upstream fix.
+**net-new** — these tasks are **strictly net-new**: an original feature/capability or a
+real edge-case gap that is **genuinely absent at the pinned base SHA**, authored fresh
+from the repo. Do **not** derive tasks from existing PRs/commits/issues in the repo, and
+do not seed regressions.
 
 ## Distribution targets (reconciled batch-wise, not per-task)
 
-- No category > 20% of tasks; no category < 5%.
-- Within a category, no subcategory > 20% of that category's tasks; cover subcategories
-  where feasible.
-- (Language distribution and cosine-similarity diversity are handled separately at the
-  batch/dataset level — not the job of a single spec.)
+- Aim for **uniform, diverse coverage** across categories and subcategories — spread
+  tasks so no bucket dominates and as many categories/subcategories as feasible are
+  represented. Any hard caps/quotas come from the **provided task requirements** if it
+  specifies them.
+- **Language distribution** is likewise kept diverse/uniform across buckets and
+  reconciled at the batch/dataset level (with cosine-similarity diversity) — not the
+  job of a single spec.

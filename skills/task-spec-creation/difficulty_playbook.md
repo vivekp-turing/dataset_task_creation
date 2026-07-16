@@ -84,13 +84,15 @@ surface from the repo_summary.
 
 ## Keeping it FAIR while hard (don't make it impossible or flaky)
 
-- A correct golden must **exist and average ~350 LoC (≈150–800) across multiple
-  files** — hard ≠ huge. If the only fix is 2000 LoC across 30 files, it's the wrong
-  surface (or a chain of unrelated tasks).
+- A correct golden must **exist, be multi-file, and be sized to the provided task
+  requirements** (e.g. a minimum gold-patch LoC and/or a minimum number of non-test
+  files touched) — hard ≠ huge. If the only fix is 2000 LoC across 30 files, it's the
+  wrong surface (or a chain of unrelated tasks).
 - **One coherent task, not a chain.** Difficulty must come from the logic, not from
   stapling several unrelated changes together.
-- **Comprehensive but scoped tests:** author ~10–20 NEW F2P (min 10) to prevent
-  reward hacking, including one that reproduces the target behavior. **Don't write new
+- **Comprehensive but scoped tests:** author a comprehensive **>5 NEW F2P (min 5)**
+  suite to prevent reward hacking, including one that reproduces the target behavior.
+  **Don't write new
   pass2pass** — the repo's **existing** suite is the pass2pass guard; just run the
   relevant existing subset to confirm no regression. Tests must be **deterministic &
   offline** — no timing/wall-clock dependence (drive delays from headers/inputs), no
@@ -103,53 +105,36 @@ surface from the repo_summary.
 - **No verifier leakage** — don't encode the test's exact numbers into the statement,
   and don't reveal the root cause, the fix, or the files to edit.
 
-## Source types + snapshot validity (MANDATORY — declare and prove it)
+## Net-new tasks + snapshot validity (MANDATORY — prove it)
 
-Tasks may be **PR-based, commit-based, issue-based, a derivation of an existing PR, or
-net-new** — with **net-new kept < 50%** of the dataset. Prefer real
-PR/commit/issue sources (SWE-Bench style): when a task is based on a real upstream
-change, the golden must **match the canonical upstream fix** (not an invented
-alternative), unless that fix is unavailable/unsuitable for benchmark use (justify).
+These tasks are **strictly net-new**: an original feature/capability or a real
+edge-case gap authored fresh from the repo. **Do NOT** build tasks from existing
+PRs/commits/issues, derivations of upstream changes, or seeded regressions — the
+deliverable must be something **genuinely absent at the pinned base SHA** that you add.
 
-Whatever the source, the task is only valid if it is real **at the pinned base
-snapshot**. Two failure modes to prevent:
+A net-new task is only valid if the gap is real **at the pinned base snapshot**. Two
+failure modes to prevent:
 
-1. **Snapshot/timeline mismatch** — pin the **pre-fix parent** commit as the base so
-   the deliverable is ABSENT at baseline. If you pin too late, the fix already landed
-   (golden empty); base it on a change that postdates your snapshot and the task
-   duplicates a future PR.
-2. **Already-correct code** — never describe working code as "broken", and never add a
-   capability that already exists.
+1. **Already-present capability** — grep/read the source at the pinned SHA to confirm
+   the capability (or the specific edge/variant) does **not** already exist. If it's
+   already there, the golden would be empty → invalid.
+2. **Already-correct code** — never describe working code as "broken".
 
 Rules:
 
-- **Declare the source type in the spec** and mark it in `task.toml` (`source_type`).
+- Mark `source_type = net-new` in the spec and in `task.toml`.
 - **Verify against the actual snapshot source (don't trust memory or the summary):**
-  - PR/commit/issue-based → identify the real change, pin its **parent** SHA, confirm
-    the deliverable is absent at baseline, and reproduce the canonical fix as golden.
   - Net-new feature → grep to confirm the capability is **genuinely absent** at the
-    pinned SHA.
+    pinned SHA; the gold patch adds it.
   - Real edge-case gap → the feature exists but the specific variant/edge is unhandled
-    in the snapshot; confirm the gap is real.
-- **Seeded regression is a LAST RESORT.** Only inject a bug if, after genuinely
-  searching, there's no real source/gap on a hard surface. The spec must say so
-  ("environment seeds a regression in X; baseline differs from upstream").
-- Contamination note: extremely famous public issues/CVEs are more likely memorized by
-  models; favor substantive, less-headline changes so the task isn't trivially solved.
-- Realistic > contrived: it should read like a plausible feature-request or bug report
-  for that project.
+    at the snapshot; confirm the gap is real; the gold patch handles it.
+- Pin a stable base **SHA/tag** so the baseline is reproducible and the deliverable is
+  absent there.
+- Contamination note: avoid re-creating a famous public feature/CVE a model likely
+  memorized; author substantive, less-headline capabilities so the task isn't trivially
+  solved.
+- Realistic > contrived: it should read like a plausible feature-request or gap for
+  that project — the kind of net-new work a real engineer on that repo would take on.
 
-### Valid source types (state which in the spec; keep net-new < 50%)
-
-1. **PR-based / commit-based / issue-based** (preferred) — a real upstream change;
-   base = its pre-fix parent; golden = the canonical fix. (Verify the deliverable is
-   absent at baseline.)
-2. **Derivation** — an existing PR adapted/extended; note what differs from upstream.
-3. **Net-new feature / real edge-case gap** — capability/edge confirmed absent in the
-   snapshot; gold patch adds/handles it. (Verify absence by grep.) Net-new < 50%.
-4. **Seeded regression** (last resort only) — subsystem is correct; environment ships
-   a realistic injected bug; gold patch restores correctness. Use only when 1–3 are
-   genuinely unavailable on a hard surface.
-
-If you cannot place your task in one of these and prove it against source, the task is
-not valid — pick another surface.
+If you cannot prove the capability/edge is **genuinely absent** at the snapshot, the
+task is not valid — pick another surface.

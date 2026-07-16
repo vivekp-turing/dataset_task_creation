@@ -24,22 +24,22 @@ snapshot (in that case, say so clearly in your reply so the main agent can reass
 
 Take your assigned idea, then confirm against the actual source. The idea MUST:
 
-- Yield an **avg-~350-LoC (≈150–800) gold patch across multiple files** (you can name
-  the files + change) — one coherent task, not a chain of unrelated changes.
-- Have an **exact correctness oracle** (spec/RFC, reference impl, corpus, upstream
-  parity / the canonical PR fix, or naive recompute).
+- Yield a **multi-file gold patch sized to the provided task requirements** (e.g. a
+  minimum gold-patch LoC and/or a minimum number of non-test files touched; you can
+  name the files + change) — one coherent task, not a chain of unrelated changes.
+- Have an **exact correctness oracle** (spec/RFC, reference impl, corpus, external
+  parity, or naive recompute).
 - Be verifiable with a **comprehensive, deterministic, offline suite of NEW fail2pass
-  tests (~10–20, min 10)** — including one that reproduces the target behavior — with
+  tests (>5, min 5)** — including one that reproduces the target behavior — with
   the repo's **existing** suite as pass2pass (do NOT author new p2p; note the subset
   to run for regression). No network/display/GPU/live services. Tests assert
   observable behavior, not the file edited / diff shape / source keywords.
-- Have a declared **source type** — PR-based / commit-based / issue-based / derivation
-  / net-new (keep net-new < 50%). **Verify against the cloned source at the pinned base
-  SHA**: the deliverable must be ABSENT at baseline. For PR/commit/issue-based tasks,
-  pin the **pre-fix parent** and make the golden **match the canonical upstream fix**.
-  For net-new/edge-case, grep to confirm the capability/edge is absent. Seeded
-  regression only as a last resort. NEVER describe already-working code as broken or
-  add a feature that already exists.
+- Be **strictly net-new** (`source_type = net-new`) — an original capability or a real
+  edge-case gap, **not** derived from an existing PR/commit/issue or a seeded
+  regression. **Verify against the cloned source at the pinned base SHA**: grep to
+  confirm the capability/edge is **genuinely absent** at baseline, so the gold patch
+  adds it. NEVER describe already-working code as broken or add a feature that already
+  exists (the golden would be empty).
 - Be **realistic + fair** and **genuinely hard**: pass the self-test in
   `difficulty_playbook.md` (difficulty from reasoning/cross-module/domain complexity,
   not vagueness). If the assigned idea turns out too easy (you could one-shot a perfect
@@ -54,13 +54,15 @@ already implemented/fixed at the snapshot.
 
 ## Requirements the spec must satisfy
 
-- Harbor format with a **separate gold patch in `solution/golden.patch`**; avg ~350
-  LoC (150–800), **multiple files**; feature impl OR bug fix.
-- **~10–20 NEW fail2pass** (incl. a behavior-reproducing case); repo's existing suite
-  = pass2pass (don't author new p2p). **No internet**, offline Docker, **<100MB git
-  image**.
+- Harbor format with a **separate gold patch in `solution/golden.patch`**; **multiple
+  files**, sized to the provided task requirements (min gold-patch LoC and/or min
+  non-test files touched); a net-new feature/capability.
+- **>5 NEW fail2pass (min 5)** (incl. a behavior-reproducing case); repo's existing
+  suite = pass2pass (don't author new p2p). **No internet**, offline Docker, **<100MB
+  git image**.
 - Difficulty target **Hard** (≤2/8) unless you justify **Medium** (≤4/8).
-- Source type declared + proven; category/subcategory + objective/artifact labels set.
+- Net-new source proven against the snapshot (capability/edge absent at base);
+  category/subcategory + objective/artifact labels set.
 - Problem statement: **problem/behavior only** — no "where to look" file lists, no
   test info, no root-cause/fix hints, no implementation steps.
 
@@ -70,9 +72,10 @@ Follow `task_spec_template.md` exactly. Mandatory sections: header block (diffic
 target + band, type, source type + proof, category/subcategory + labels, patch size,
 offline), one-line, problem domain & current behavior, **Why it is hard
 (deliberately)**, **Golden patch — feasibility & approach** (name files + oracle),
-**fail2pass test strategy** (~10–20 NEW F2P + behavior-reproducing case + edges +
-existing-suite pass2pass note + run command), files-touched estimate (~350 LoC),
-Harbor/image notes, and a **non-leaking problem-statement draft**.
+**fail2pass test strategy** (>5 NEW F2P (min 5) + behavior-reproducing case + edges +
+existing-suite pass2pass note + run command), files-touched estimate (per the required
+min LoC / non-test files), Harbor/image notes, and a **non-leaking problem-statement
+draft**.
 
 Ground every architectural/flow claim in a real file you actually inspected. If you
 cannot see both the golden and the tests for your assigned idea, report that back so
