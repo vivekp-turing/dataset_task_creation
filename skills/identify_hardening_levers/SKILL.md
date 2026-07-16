@@ -3,9 +3,9 @@ name: identify_hardening_levers
 description: >-
   DIAGNOSE why an EASY Harbor (SWE-Bench-style fail2pass) task isn't hard enough, and
   PRESCRIBE the hardness levers to fix it — the diagnosis half of the hardening loop. A
-  task is "easy" when it misses the Hard/Medium acceptance bar: the Phase-5 cheap-model
-  filter (Sonnet 5 pass@1 solves it) or the Phase-7 pass@8 runs (Opus 4.8 / GPT-5.5 solve
-  it more than the band allows: Hard >2/8, Medium >4/8). This skill reads the eval results
+  task is "easy" when it misses the acceptance bar: the Phase-5 cheap-model pre-filter (a
+  cheaper model, e.g. GLM-5.2, solves it at pass@1) or the Phase-7 pass@k runs (the
+  batch's target models solve it more than the band allows). This skill reads the eval results
   + trajectories, diagnoses WHY the task is easy (single obvious fix, leaked/over-specified
   instruction, weak/holey verifier, too-small scope, contamination, copyable analogue),
   selects TASK-SPECIFIC candidate levers calibrated to how easy it was, and writes a
@@ -33,15 +33,28 @@ spec and administers the minimal cure. Together they are the pipeline's **harden
 this skill runs after **Phase 5** (cheap-model filter) or **Phase 7** (pass@8 benchmark)
 whenever a task misses its band, and the rebuilt harder version re-enters at **Phase 5**.
 
-## The bar you're hardening toward (from the requirements)
+## The bar you're hardening toward (from the batch task-requirements file)
 
-Difficulty is measured as **pass@8** in the models' native harnesses (Codex + Claude
-Code), classified by the worse (higher) solve rate:
+The **batch task-requirements file** (e.g. `docs/<client>_task_requirements.md`) defines
+the difficulty gate you harden toward — the **target models**, the **reward@k
+thresholds/band**, and the **reasoning effort**. When it's provided, its gate overrides
+the defaults below. Read it first and harden to *its* band, not a hardcoded one.
+
+**Defaults (used only when no requirements file is supplied)** — difficulty measured as
+**pass@8** in the models' native harnesses (Codex + Claude Code), classified by the
+worse (higher) solve rate:
 
 - **Hard** — Opus 4.8 / GPT-5.5 solve **≤ 2/8**.
 - **Medium** — Opus 4.8 / GPT-5.5 solve **≤ 4/8**.
-- **Cheap pre-filter** — a task **Sonnet 5 solves at pass@1** is not Hard; hardening a
-  Hard-target task must make Sonnet 5 **fail** pass@1 as a floor.
+- **Cheap pre-filter** — a task the **cheaper pre-filter model (e.g. GLM-5.2, chosen
+  for being much cheaper than a frontier model while close to Opus 4.8) solves at
+  pass@1** is not Hard; hardening a Hard-target task must make that cheap model **fail**
+  pass@1 as a floor.
+
+Some batches define a **two-sided band** (a task can be *too hard* as well as too easy) —
+e.g. xAI: **1/8 ≤ Grok-4.5 reward@8 ≤ 6/8** at **xhigh** reasoning. When the gate is
+two-sided, "harden" means move the pass-rate *into* the band from either side; do not
+push a task below the band's floor.
 
 Difficulty must be **justified**: it has to come from **reasoning complexity, cross-module
 understanding, subtle behavioral differences, or deep domain knowledge** — NOT from
@@ -56,9 +69,9 @@ hardened a task until a re-run shows the model pass-rate actually dropped into t
   current `difficulty` target, `source_type`, `category/subcategory`, `num_f2p_tests`, and
   any recorded `pass_at_k_*`.
 - **Required — at least one easiness signal:**
-  - **Phase-5 signal** — the Sonnet 5 pass@1 result for this task (auto-qc `--prefilter`
-    record / `difficulty_concern` flag, or the raw harbor eval run dir), and ideally the
-    trial trajectory.
+  - **Phase-5 signal** — the cheap-model (e.g. GLM-5.2) pass@1 result for this task
+    (auto-qc `--prefilter` record / `difficulty_concern` flag, or the raw harbor eval run
+    dir), and ideally the trial trajectory.
   - **Phase-7 signal** — the pass@8 run dir(s) for Opus 4.8 (Claude Code) and/or GPT-5.5
     (Codex): the per-trial `result.json` / `verifier/reward.json` + `agent/trajectory.json`.
 - **Helpful** — the auto-qc output (`autoqc/<slug>.autoqc.json`) so hardening doesn't
@@ -92,12 +105,12 @@ Read the signals and set severity; it scales how much you change.
 
 | Signal observed | Severity | What it means |
 |---|---|---|
-| Sonnet 5 **solves** at pass@1 | **severe** | Surface is fundamentally too easy; a verifier tweak won't fix it — deepen the surface. Floor: Sonnet must fail after. |
+| Cheap pre-filter model **solves** at pass@1 | **severe** | Surface is fundamentally too easy; a verifier tweak won't fix it — deepen the surface. Floor: the cheap model must fail after. |
 | Frontier solve rate **far above** band (e.g. Hard target, Opus/GPT ≥ 5/8) | **severe→moderate** | Single obvious fix and/or weak verifier; needs real reasoning added. |
 | Frontier solve rate **just above** band (e.g. Hard target, 3–4/8; Medium, 5–6/8) | **light→moderate** | Close — a targeted edge/verifier tightening + mild underspecify usually lands it. |
 | In band already | — | Don't harden. (If asked to push Medium→Hard, treat as moderate.) |
 
-Record the before-numbers: Sonnet 5 pass@1, and Opus/GPT pass@8 (x/8 each), and the **gap**
+Record the before-numbers: the cheap-model pass@1, and Opus/GPT pass@8 (x/8 each), and the **gap**
 (how many solves above the band). These are the baseline `implement_hardening_levers` must
 beat, and the gap tells the doctor how big a dose to administer.
 
@@ -147,9 +160,12 @@ tightening; *light* often needs one edge-matrix + de-leak lever.
 For **every** selected lever, confirm it keeps the task legal and fair — this is
 non-negotiable and is written into the spec per lever:
 
-- **Requirements** — golden stays **avg ~350 LoC (≈150–800), multi-file**; the new tests
-  are **~10–20 NEW F2P** (never new pass2pass — the repo's existing suite is the pass2pass
-  guard); **deterministic + offline**; `source_type` still valid at the pinned base SHA
+- **Requirements** — golden stays **within the batch task-requirements file's LoC band**
+  (default: avg ~350 LoC, ≈150–800; e.g. xAI: > 1000 LoC), **multi-file**; the new tests
+  stay in the batch task-requirements file's F2P count (default: **~10–20 NEW F2P**;
+  always keep **> 5** regardless of batch) (never new pass2pass — the repo's existing
+  suite is the pass2pass guard); **deterministic + offline**; `source_type` still valid
+  at the pinned base SHA
   (PR-based golden still matches the **canonical upstream fix**); `<100 MB` image;
   taxonomy unchanged (or re-tag if the objective shifts).
 - **Quality rubrics** (the auto-qc rubrics — don't trade difficulty for a rubric failure):
@@ -212,9 +228,10 @@ skill's job ends at a clear, ROI-ranked, rubric-safe prescription.
 - **"Hard because vague"** — a lever that strips the instruction until the goal is unclear.
   De-leak, don't obscure. A capable engineer must still be able to find the surface.
 - **Chaining unrelated subtasks** to inflate size/scope. The hardened task stays ONE
-  coherent, realistic goal (avg ~350 LoC, multi-file — hard ≠ huge).
+  coherent, realistic goal within the batch task-requirements file's LoC band
+  (multi-file — hard ≠ huge).
 - **New pass2pass tests** — the repo's existing suite is the pass2pass guard; only the
-  ~10–20 F2P are in scope.
+  batch task-requirements file's F2P set (default ~10–20; always > 5) is in scope.
 - **Diagnosing without evidence** — every "why it's easy" claim and every lever must trace
   to a trajectory `step_id` or a concrete verifier hole, not a hunch.
 - **Generic, non-task-specific levers** — "add edge cases" without naming which edges of

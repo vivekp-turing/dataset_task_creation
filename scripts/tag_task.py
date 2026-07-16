@@ -4,7 +4,7 @@
 Given a task (a PR, an issue, a commit, or a Harbor-format task folder), this script
 uses an LLM (Anthropic Claude) as a judge to classify the *dominant engineering work*
 required to resolve the issue into the category / subcategory taxonomy defined in the
-Reflection task-requirements spec, plus the primary programming language.
+batch task-requirements spec, plus the primary programming language.
 
 Output is a JSON object with:
   - ``categories``:    confidence score (0-1) for EVERY category.
@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # ---------------------------------------------------------------------------
-# Taxonomy (from the Reflection task-requirements spec, "Distribution
+# Taxonomy (from the batch task-requirements spec, "Distribution
 # requirements" section). category -> ordered list of subcategories.
 # ---------------------------------------------------------------------------
 TAXONOMY: Dict[str, List[str]] = {

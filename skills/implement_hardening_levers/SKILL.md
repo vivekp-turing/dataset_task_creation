@@ -31,15 +31,22 @@ The task is a Harbor SWE-Bench-style task in this pipeline's format: `instructio
 solve.sh}`, `tests/test.sh` (fail2pass patch embedded inline). Build edits follow the
 **[`task_spec_to_harbor_task`](../task_spec_to_harbor_task/)** conventions.
 
-## The bar you're curing toward (unchanged from the requirements)
+## The bar you're curing toward (from the batch task-requirements file)
 
-Difficulty is **pass@8** in the models' native harnesses, classified by the worse (higher)
-solve rate: **Hard** = Opus 4.8 / GPT-5.5 ≤ 2/8; **Medium** = ≤ 4/8. A **Hard**-target task
-must also make **Sonnet 5 fail pass@1** (Phase 5). The lower pass-rate must come from the
+The **batch task-requirements file** (e.g. `docs/<client>_task_requirements.md`) sets the
+gate — target models, reward@k band, and reasoning effort. Cure toward *that* band; the
+values below are **defaults** used only when no requirements file is supplied, and its
+`hardness_levers.md` prescription already encodes the concrete target.
+
+**Default gate:** difficulty is **pass@8** in the models' native harnesses, classified by
+the worse (higher) solve rate: **Hard** = Opus 4.8 / GPT-5.5 ≤ 2/8; **Medium** = ≤ 4/8. A
+**Hard**-target task must also make the **cheaper pre-filter model (e.g. GLM-5.2) fail
+pass@1** (Phase 5). If the batch gate
+is **two-sided** (e.g. xAI: 1/8 ≤ Grok-4.5 reward@8 ≤ 6/8 at xhigh), move the pass-rate
+*into* the band without dropping below its floor. The lower pass-rate must come from the
 task being genuinely harder — reasoning/cross-module/subtlety/domain — while it stays
 **fair, realistic, and solvable**, with the verifier aligned to the instruction and **no
-false negatives**. You have NOT cured it until a re-run shows the pass-rate dropped into
-band.
+false negatives**. You have NOT cured it until a re-run shows the pass-rate is in band.
 
 ## Core principle — minimal effective dose (ROI-first, gap-driven)
 
@@ -51,7 +58,7 @@ thumb (the identify spec's severity + gap set the starting dose):
 |---|---|
 | **Just over** (e.g. Hard target, 3–4/8; Medium, 5–6/8) | the **single** top-ROI lever (usually a verifier/edge or de-leak lever). Measure; add one more only if needed. |
 | **Well over** (Hard target ≥5/8) | the top-ROI lever **+** one surface-deepening lever. |
-| **Sonnet solves pass@1** (severe) | at least one surface-deepening lever **+** a verifier lever; verifier-only will not cure a fundamentally easy surface. |
+| **Cheap model solves pass@1** (severe) | at least one surface-deepening lever **+** a verifier lever; verifier-only will not cure a fundamentally easy surface. |
 
 Prefer low-blast-radius levers first (instruction/tests) before invasive ones (golden
 scope growth), because every extra change is extra risk to solvability, realism, and the
@@ -62,9 +69,9 @@ rubrics. **Add levers one at a time and re-measure** so each pass-rate move is a
 - **Required** — the task at `<task_dir>/` and its prescription
   `tasks/<slug>/hardness_levers.md` (header, ROI-ranked levers, gap, what each lever
   touches, predicted impact).
-- **Required** — the easiness signal the prescription is based on (Phase-5 Sonnet 5 pass@1
-  and/or Phase-7 pass@8 run dirs) so you can reconstruct the agent's easy fix and confirm
-  the cure blocks it.
+- **Required** — the easiness signal the prescription is based on (Phase-5 cheap-model
+  pass@1 and/or Phase-7 pass@8 run dirs) so you can reconstruct the agent's easy fix and
+  confirm the cure blocks it.
 - **Helpful** — the task's `auto-qc` output so you don't regress a quality rubric; the
   original `task_spec_*.md`; the repo clone at the base SHA for rebuilding patches.
 
@@ -81,7 +88,7 @@ a diagnosis, it doesn't create one.
         artifacts (instruction → tests → golden) so they stay consistent.
 - [ ] 5. Validate BOTH directions locally: golden still passes; the previously-easy fix +
         naive/partial now FAIL; requirements + separation + non-leak all hold.
-- [ ] 6. Re-eval: Phase 5 (Sonnet 5 pass@1) → Phase 6 (auto-qc) → Phase 7 (pass@8).
+- [ ] 6. Re-eval: Phase 5 (cheap-model pass@1) → Phase 6 (auto-qc) → Phase 7 (pass@8).
 - [ ] 7. If still out of band → add the NEXT-highest-ROI lever in <task_dir>_v3 and repeat.
         If now UNFAIR (false negative / ambiguity / leakage / flaky) → back off / fix.
         Stop when in-band + fair + solvable. Log each version in hardness_levers.md.
@@ -104,8 +111,9 @@ usually forces changes to the others.** Keep them consistent every time.
   didn't cover, the **golden must be extended** to handle it (never weaken the test to fit
   a thin golden). Bump `task.toml [metadata].num_f2p_tests`.
 - **If scope grows** (D1 cross-module, D2 round-trip, E1 re-base, F1 adaptation): rebuild
-  `solution/golden.patch` as **source-only** across the added files (keep avg ~350 LoC,
-  ≈150–800, multi-file — grow coherently, never staple unrelated changes), re-embed
+  `solution/golden.patch` as **source-only** across the added files (keep it within the
+  batch task-requirements file's LoC band — default avg ~350 LoC, ≈150–800; e.g. xAI
+  > 1000 LoC — multi-file, grow coherently, never staple unrelated changes), re-embed
   `solve.sh`, AND widen the tests to assert the new behavior. Re-verify `source_type`
   validity at the base SHA; for PR-based tasks keep matching the **canonical upstream fix**.
 - **Always** update `task.toml [metadata].difficulty` / `difficulty_explanation` to reflect
@@ -130,11 +138,13 @@ are tightening the *bar*, never pinning an implementation or hiding the goal.
 
 ### Step 6 — re-eval (the only proof the dose worked)
 
-1. **Phase 5** — Sonnet 5 pass@1 (Claude Code). For a Hard target it must now **fail**.
+1. **Phase 5** — cheap-model pass@1 pre-filter (e.g. GLM-5.2, Claude Code). For a
+   Hard target it must now **fail**. (Skip if the batch gate has no cheap pre-filter.)
 2. **Phase 6** — `auto-qc`: must stay **accept** (no quality rubric regressed by the cure).
-3. **Phase 7** — pass@8 with Opus 4.8 (Claude Code) + GPT-5.5 (Codex) on Daytona; record
-   `pass_at_k_opus_4_8` / `pass_at_k_gpt_5_5` in `task.toml`. In band? (Hard ≤2/8, Medium
-   ≤4/8.)
+3. **Phase 7** — reward@k with the batch task-requirements file's **target models + k**
+   (default: pass@8 with Opus 4.8 (Claude Code) + GPT-5.5 (Codex); e.g. xAI: Grok-4.5
+   reward@8 at xhigh); record `pass_at_k_*` per model in `task.toml`. In the batch
+   task-requirements file's band? (default Hard ≤2/8, Medium ≤4/8.)
 
 ### Step 7 — titrate
 
@@ -155,7 +165,7 @@ are tightening the *bar*, never pinning an implementation or hiding the goal.
 - **`<task_dir>_v2/`** (…`_vN` — the cured version, pure Harbor format, nothing extra;
   earlier versions left untouched).
 - **Updated `tasks/<slug>/hardness_levers.md`** — the iteration log filled in per version
-  (levers applied, Sonnet pass@1, Opus/GPT pass@8, auto-qc verdict, notes).
+  (levers applied, cheap-model pass@1, Opus/GPT pass@8, auto-qc verdict, notes).
 - A short **report**: the gap before → after, exactly which levers were dosed (and which
   from the prescription were deliberately *not* applied and why), the solvability +
   cure-bit checks, the auto-qc verdict, and the final band.
@@ -172,9 +182,9 @@ are tightening the *bar*, never pinning an implementation or hiding the goal.
 - **Weakening the golden or a test to make them agree** instead of extending the golden to
   meet a fair new assertion.
 - **Scope growth by stapling unrelated changes** — the cured task stays ONE coherent,
-  realistic goal (avg ~350 LoC, multi-file; hard ≠ huge).
+  realistic goal within the batch task-requirements file's LoC band (multi-file; hard ≠ huge).
 - **Writing new pass2pass tests** — the repo's existing suite is the pass2pass guard; only
-  the ~10–20 F2P are yours.
+  the batch task-requirements file's F2P set (default ~10–20; always > 5) is yours.
 - **Editing in place / leaving scratch** (`analyzer/`, `__pycache__`, notes) in the task —
   branch to `_vN` and keep it pure Harbor format.
 - **Declaring "cured" without re-measuring** — you haven't hardened it until Phase 5/7 show
