@@ -16,8 +16,13 @@ minimum gold-patch LoC and/or a minimum number of non-test files touched), a
 repo's existing suite as the `pass2pass` regression guard, and a `<100 MB` git image with
 an offline Docker build.
 
-**Difficulty target (per the requirements): ~50% Medium / ~50% Hard**, measured as
-**pass@8** in the models' native harnesses:
+> The LoC band, F2P count, net-new cap, and difficulty gate come from the **batch
+> task-requirements file** for the current batch (e.g. `docs/<client>_task_requirements.md`);
+> the numbers here are **defaults** used when none is supplied. A hard floor of **> 5 F2P
+> tests** always applies regardless of the batch.
+
+**Difficulty target (per the batch task-requirements file; default): ~50% Medium / ~50%
+Hard**, measured as **pass@8** in the models' native harnesses:
 
 - **Medium** — GPT-5.5 (Codex) or Opus 4.8 (Claude Code) solves `≤ 4/8`.
 - **Hard** — GPT-5.5 (Codex) or Opus 4.8 (Claude Code) solves `≤ 2/8`.
@@ -243,19 +248,21 @@ cleanly separated, and the instruction leaks nothing.
 
 **Output:** one Harbor task folder per spec (up to 3 per repo).
 
-### Phase 5 — Cheap-model difficulty pre-filter  ·  Sonnet 5 pass@1 (Claude Code)
+### Phase 5 — Cheap-model difficulty pre-filter  ·  cheap-model pass@1 (default GLM-5.2, Claude Code)
 
 Before spending on the full pass@8 benchmark, cheaply screen out tasks that aren't
 actually hard. Run a **single attempt (pass@1)** of the built task through the **Harbor
-eval harness with the Claude Code agent on Claude Sonnet 5**.
+eval harness with the Claude Code agent on a cheaper model** — default **GLM-5.2** (chosen
+for being much cheaper than a frontier model while close to Opus 4.8 in performance; the
+batch task-requirements file may name a different cheap model).
 
-- If **Sonnet 5 solves the task** (reward = 1), it is **not difficult** — such a task
-  will almost certainly be solved by Opus 4.8 / GPT-5.5, so **harden it** with the
-  hardening loop (see below) — `identify_hardening_levers` → `implement_hardening_levers` — or drop it.
-- If **Sonnet 5 fails**, the task survives to Auto QC and the full pass@8 benchmark.
+- If **the cheap model solves the task** (reward = 1), it is **not difficult** — such a
+  task will almost certainly be solved by the frontier target models, so **harden it** with
+  the hardening loop (see below) — `identify_hardening_levers` → `implement_hardening_levers` — or drop it.
+- If **the cheap model fails**, the task survives to Auto QC and the full pass@8 benchmark.
 
-This mirrors the requirements' guidance to use a cheaper model for an initial difficulty
-assessment before the expensive frontier-model runs. Save the pass@1 results
+This mirrors the guidance to use a cheaper model for an initial difficulty assessment
+before the expensive frontier-model runs. Save the pass@1 results
 (`.jsonl`/`.json`/per-task dir) — Phase 6's Auto-QC folds them in as a difficulty signal
 via `--prefilter`, and the hardening skill reads them (plus the trajectory) to diagnose
 *why* a task was easy.
@@ -285,8 +292,8 @@ cd scripts/auto_qc
 # QC one task
 python auto_qc.py <path>/harbor_tasks/<task-slug> --output-dir out
 
-# QC a batch, folding in the Phase 5 Sonnet 5 pass@1 pre-filter
-python auto_qc.py <path>/harbor_tasks --prefilter <sonnet5_pass1.jsonl> --output-dir out
+# QC a batch, folding in the Phase 5 cheap-model pass@1 pre-filter
+python auto_qc.py <path>/harbor_tasks --prefilter <cheap_model_pass1.jsonl> --output-dir out
 
 # strict difficulty gate: also reject anything the cheap model solved at pass@1
 python auto_qc.py <path>/harbor_tasks --prefilter <results/> --strict-difficulty
@@ -333,9 +340,9 @@ their difficulty tier are rejected. Tasks that pass go to **human review** and t
 
 ### Hardening loop  ·  skills: [`identify_hardening_levers`](skills/identify_hardening_levers/) → [`implement_hardening_levers`](skills/implement_hardening_levers/)
 
-Whenever **Phase 5** shows a task is too easy (Sonnet 5 solves it at pass@1), a two-skill
-loop turns it into a harder one, driven by the eval evidence — a diagnosis skill and a
-"hardness doctor" implementation skill:
+Whenever **Phase 5** shows a task is too easy (the cheap pre-filter model, default GLM-5.2,
+solves it at pass@1), a two-skill loop turns it into a harder one, driven by the eval
+evidence — a diagnosis skill and a "hardness doctor" implementation skill:
 
 1. **`identify_hardening_levers` — diagnose + prescribe.** From the eval results +
    trajectories, work out *why* it's easy (single obvious fix, leaked/over-specified
