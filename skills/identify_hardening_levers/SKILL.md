@@ -33,15 +33,26 @@ spec and administers the minimal cure. Together they are the pipeline's **harden
 this skill runs after **Phase 5** (cheap-model filter) or **Phase 7** (pass@8 benchmark)
 whenever a task misses its band, and the rebuilt harder version re-enters at **Phase 5**.
 
-## The bar you're hardening toward (from the requirements)
+## The bar you're hardening toward (from the batch task-requirements file)
 
-Difficulty is measured as **pass@8** in the models' native harnesses (Codex + Claude
-Code), classified by the worse (higher) solve rate:
+The **batch task-requirements file** (e.g. `docs/<client>_task_requirements.md`) defines
+the difficulty gate you harden toward — the **target models**, the **reward@k
+thresholds/band**, and the **reasoning effort**. When it's provided, its gate overrides
+the defaults below. Read it first and harden to *its* band, not a hardcoded one.
+
+**Defaults (used only when no requirements file is supplied)** — difficulty measured as
+**pass@8** in the models' native harnesses (Codex + Claude Code), classified by the
+worse (higher) solve rate:
 
 - **Hard** — Opus 4.8 / GPT-5.5 solve **≤ 2/8**.
 - **Medium** — Opus 4.8 / GPT-5.5 solve **≤ 4/8**.
 - **Cheap pre-filter** — a task **Sonnet 5 solves at pass@1** is not Hard; hardening a
   Hard-target task must make Sonnet 5 **fail** pass@1 as a floor.
+
+Some batches define a **two-sided band** (a task can be *too hard* as well as too easy) —
+e.g. xAI: **1/8 ≤ Grok-4.5 reward@8 ≤ 6/8** at **xhigh** reasoning. When the gate is
+two-sided, "harden" means move the pass-rate *into* the band from either side; do not
+push a task below the band's floor.
 
 Difficulty must be **justified**: it has to come from **reasoning complexity, cross-module
 understanding, subtle behavioral differences, or deep domain knowledge** — NOT from
@@ -147,9 +158,11 @@ tightening; *light* often needs one edge-matrix + de-leak lever.
 For **every** selected lever, confirm it keeps the task legal and fair — this is
 non-negotiable and is written into the spec per lever:
 
-- **Requirements** — golden stays **avg ~350 LoC (≈150–800), multi-file**; the new tests
-  are **~10–20 NEW F2P** (never new pass2pass — the repo's existing suite is the pass2pass
-  guard); **deterministic + offline**; `source_type` still valid at the pinned base SHA
+- **Requirements** — golden stays **within the batch file's LoC band** (default: avg
+  ~350 LoC, ≈150–800; e.g. xAI: > 1000 LoC), **multi-file**; the new tests stay in the
+  batch file's F2P count (default: **~10–20 NEW F2P**) (never new pass2pass — the repo's
+  existing suite is the pass2pass guard); **deterministic + offline**; `source_type`
+  still valid at the pinned base SHA
   (PR-based golden still matches the **canonical upstream fix**); `<100 MB` image;
   taxonomy unchanged (or re-tag if the objective shifts).
 - **Quality rubrics** (the auto-qc rubrics — don't trade difficulty for a rubric failure):
@@ -212,9 +225,9 @@ skill's job ends at a clear, ROI-ranked, rubric-safe prescription.
 - **"Hard because vague"** — a lever that strips the instruction until the goal is unclear.
   De-leak, don't obscure. A capable engineer must still be able to find the surface.
 - **Chaining unrelated subtasks** to inflate size/scope. The hardened task stays ONE
-  coherent, realistic goal (avg ~350 LoC, multi-file — hard ≠ huge).
+  coherent, realistic goal within the batch LoC band (multi-file — hard ≠ huge).
 - **New pass2pass tests** — the repo's existing suite is the pass2pass guard; only the
-  ~10–20 F2P are in scope.
+  batch file's F2P set (default ~10–20) is in scope.
 - **Diagnosing without evidence** — every "why it's easy" claim and every lever must trace
   to a trajectory `step_id` or a concrete verifier hole, not a hunch.
 - **Generic, non-task-specific levers** — "add edge cases" without naming which edges of

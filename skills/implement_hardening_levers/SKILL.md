@@ -31,15 +31,21 @@ The task is a Harbor SWE-Bench-style task in this pipeline's format: `instructio
 solve.sh}`, `tests/test.sh` (fail2pass patch embedded inline). Build edits follow the
 **[`task_spec_to_harbor_task`](../task_spec_to_harbor_task/)** conventions.
 
-## The bar you're curing toward (unchanged from the requirements)
+## The bar you're curing toward (from the batch task-requirements file)
 
-Difficulty is **pass@8** in the models' native harnesses, classified by the worse (higher)
-solve rate: **Hard** = Opus 4.8 / GPT-5.5 ≤ 2/8; **Medium** = ≤ 4/8. A **Hard**-target task
-must also make **Sonnet 5 fail pass@1** (Phase 5). The lower pass-rate must come from the
+The **batch task-requirements file** (e.g. `docs/<client>_task_requirements.md`) sets the
+gate — target models, reward@k band, and reasoning effort. Cure toward *that* band; the
+values below are **defaults** used only when no requirements file is supplied, and its
+`hardness_levers.md` prescription already encodes the concrete target.
+
+**Default gate:** difficulty is **pass@8** in the models' native harnesses, classified by
+the worse (higher) solve rate: **Hard** = Opus 4.8 / GPT-5.5 ≤ 2/8; **Medium** = ≤ 4/8. A
+**Hard**-target task must also make **Sonnet 5 fail pass@1** (Phase 5). If the batch gate
+is **two-sided** (e.g. xAI: 1/8 ≤ Grok-4.5 reward@8 ≤ 6/8 at xhigh), move the pass-rate
+*into* the band without dropping below its floor. The lower pass-rate must come from the
 task being genuinely harder — reasoning/cross-module/subtlety/domain — while it stays
 **fair, realistic, and solvable**, with the verifier aligned to the instruction and **no
-false negatives**. You have NOT cured it until a re-run shows the pass-rate dropped into
-band.
+false negatives**. You have NOT cured it until a re-run shows the pass-rate is in band.
 
 ## Core principle — minimal effective dose (ROI-first, gap-driven)
 
@@ -104,8 +110,9 @@ usually forces changes to the others.** Keep them consistent every time.
   didn't cover, the **golden must be extended** to handle it (never weaken the test to fit
   a thin golden). Bump `task.toml [metadata].num_f2p_tests`.
 - **If scope grows** (D1 cross-module, D2 round-trip, E1 re-base, F1 adaptation): rebuild
-  `solution/golden.patch` as **source-only** across the added files (keep avg ~350 LoC,
-  ≈150–800, multi-file — grow coherently, never staple unrelated changes), re-embed
+  `solution/golden.patch` as **source-only** across the added files (keep it within the
+  batch file's LoC band — default avg ~350 LoC, ≈150–800; e.g. xAI > 1000 LoC — multi-file,
+  grow coherently, never staple unrelated changes), re-embed
   `solve.sh`, AND widen the tests to assert the new behavior. Re-verify `source_type`
   validity at the base SHA; for PR-based tasks keep matching the **canonical upstream fix**.
 - **Always** update `task.toml [metadata].difficulty` / `difficulty_explanation` to reflect
@@ -130,11 +137,13 @@ are tightening the *bar*, never pinning an implementation or hiding the goal.
 
 ### Step 6 — re-eval (the only proof the dose worked)
 
-1. **Phase 5** — Sonnet 5 pass@1 (Claude Code). For a Hard target it must now **fail**.
+1. **Phase 5** — cheap-model pass@1 pre-filter (default Sonnet 5, Claude Code). For a
+   Hard target it must now **fail**. (Skip if the batch gate has no cheap pre-filter.)
 2. **Phase 6** — `auto-qc`: must stay **accept** (no quality rubric regressed by the cure).
-3. **Phase 7** — pass@8 with Opus 4.8 (Claude Code) + GPT-5.5 (Codex) on Daytona; record
-   `pass_at_k_opus_4_8` / `pass_at_k_gpt_5_5` in `task.toml`. In band? (Hard ≤2/8, Medium
-   ≤4/8.)
+3. **Phase 7** — reward@k with the batch file's **target models + k** (default: pass@8
+   with Opus 4.8 (Claude Code) + GPT-5.5 (Codex); e.g. xAI: Grok-4.5 reward@8 at xhigh);
+   record `pass_at_k_*` per model in `task.toml`. In the batch file's band? (default
+   Hard ≤2/8, Medium ≤4/8.)
 
 ### Step 7 — titrate
 
@@ -172,9 +181,9 @@ are tightening the *bar*, never pinning an implementation or hiding the goal.
 - **Weakening the golden or a test to make them agree** instead of extending the golden to
   meet a fair new assertion.
 - **Scope growth by stapling unrelated changes** — the cured task stays ONE coherent,
-  realistic goal (avg ~350 LoC, multi-file; hard ≠ huge).
+  realistic goal within the batch LoC band (multi-file; hard ≠ huge).
 - **Writing new pass2pass tests** — the repo's existing suite is the pass2pass guard; only
-  the ~10–20 F2P are yours.
+  the batch file's F2P set (default ~10–20) is yours.
 - **Editing in place / leaving scratch** (`analyzer/`, `__pycache__`, notes) in the task —
   branch to `_vN` and keep it pure Harbor format.
 - **Declaring "cured" without re-measuring** — you haven't hardened it until Phase 5/7 show
