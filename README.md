@@ -124,17 +124,33 @@ sheet (`docs/Turing SWEBench Public Dataset (Long-Range Tasks only, n=2551).xlsx
 per-repo signals, but **restrict the candidate set to `docs/turing_approved_repos.txt`** —
 never select a repo that is not on that list.
 
+> **Optional task requirements.** Phase 1 (and Phase 2) can also be handed a *task
+> requirements* file describing what kind of net-new tasks this batch should target —
+> e.g. a gold-patch size band (`>500 LoC`, `>1k LoC`), a minimum number of non-test
+> files touched (`>3`), a specific language distribution, or a category/domain focus.
+> When provided, **translate those criteria into the selection thresholds**
+> (`--min-instance-loc` / `--target-instance-loc`, `--lang-counts`, and a preference for
+> larger / multi-module repos) so only repos that can plausibly support the requested
+> tasks are shortlisted. The same requirements then steer the 5–6 difficult task ideas
+> produced in Phase 2.
+
 The skill (`skills/seed-repo-selection/scripts/select_seed_repos.py`) filters and ranks
 against `updated_reflection_reqs_9_july` and writes a deduped CSV (one row per repo):
 
 - **Metadata used:** per-task patch size (`instance_loc`), total repo size (`loc`),
   `language`, `difficulty_score`, `code_type_primary` (feature / bug-fix / refactor),
   `f2p_count` / `p2p_count`, `stars`.
-- **Quality gate** (all tunable): `instance_loc` in the ~350-LoC band (≈150–800),
-  `f2p_count >= 5` (a signal the repo has dense tests — authored tasks target ~10–20 F2P),
-  `stars >= 250` (≥40% of tasks must come from >1k-star repos), sane repo size (drops the
-  unknown/huge sentinel to keep the image `<100 MB`), and code type in
-  {feature, bug-fix, refactor}.
+- **Approved-repo gate (hard):** `--approved-repos docs/turing_approved_repos.txt` is
+  applied **before anything else** — a repo that is not on the approved list is never
+  selectable (drop the flag only if no approved list exists yet).
+- **Quality gate** (all tunable): `instance_loc` in the target band (default ~350-LoC,
+  ≈150–800; set per the task spec), `f2p_count >= 5` (a signal the repo has dense tests),
+  `stars >= 250` (≥40% of tasks must come from >1k-star repos), and sane repo size (drops
+  the unknown/huge sentinel to keep the image `<100 MB`).
+- **Ranking signals (soft):** closeness to the `instance_loc` sweet spot, higher
+  `difficulty_score`, capped popularity, and test coverage. `code_type_primary`
+  (feature / bug-fix / refactor) is only a *suggestion* here — a bug-fix scoring bonus,
+  **not** a hard filter.
 - **Coverage:** pick N repos per language group; the global language distribution and the
   diversity caps (no repo `>10%`, no owner `>20%`, ≥8 languages, no language `>30%`) are
   reconciled batch-wise later.
@@ -151,15 +167,18 @@ task-authoring intelligence, not docs:
   hierarchy, module graph, end-to-end pipeline) — every claim cites a real file path;
 - **Testing** + **Offline / Containerization Notes** — which test layers are
   offline-safe (unit) vs need network/display/GPU/live services (the offline gate);
-- **"Difficult Task Ideas"** — **exactly 5–6 file-cited ideas, ranked hardest-first**.
-  Each names the implementation file(s) + the test file(s) that would anchor fail2pass,
-  an avg-~350-LoC change sketch, a one-line **why it's hard** + a rough **difficulty
-  target** (Hard ≤2/8 or Medium ≤4/8), and is marked feature vs bug-fix, tagged with a
-  likely taxonomy **category** + **source type**, and offline-safe vs not.
+- **"Difficult Task Ideas"** — **5–6 file-cited ideas, ranked hardest-first**, that are
+  genuinely hard *and* realistic/fair (work engineers actually build and use — not
+  contrived puzzles). Each names the implementation file(s) + the test file(s) that would
+  anchor fail2pass, a **multi-file** change sketch (sized per the task spec), a one-line
+  **why it's hard** + a rough **difficulty target** (Hard ≤2/8 or Medium ≤4/8), the
+  **type of task idea** (feature, bug-fix, performance optimization, ML engineering, data
+  auditing, algorithm implementation, LLM pipeline, …), a likely taxonomy **category** +
+  **source type**, and offline-safe vs not.
 
 This is the **exploration ⇄ initial task ideas** loop: the ranked "Difficult Task Ideas"
 section *is* the candidate pool that Phase 3 selects the top 3 hardest from, so thin
-summaries (or ones without 5–6 ranked, genuinely-hard ideas) are re-explored.
+summaries (or ones without 5–6 ranked, genuinely-hard, realistic ideas) are re-explored.
 
 **Output:** `tasks/<repo-slug>/repo_summary.md` per repo.
 

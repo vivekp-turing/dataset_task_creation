@@ -4,11 +4,10 @@ description: >-
   Deeply explore SEED REPOS (already selected) and write a high-detail
   repo_summary.md per repo — overview, build/test/tooling, architecture, a
   hierarchical mental model, key implementation files, testing + OFFLINE
-  containerization notes, and a focused set of 5-6 concrete "Difficult Task
-  Ideas" ranked hardest-first, tailored to the task requirements (avg ~350 LoC /
-  ≈150-800 multi-file patches, ~10-20 fail2pass tests, <100MB git image + offline
-  Docker build). Use after picking seed repos (e.g. from
-  seed-repo-selection / seed_repos_60.csv) when asked to explore repos
+  containerization notes, and a focused set of 5-6 concrete new "Difficult Task
+  Ideas" ranked hardest-first, tailored to the new task generation requirements. You
+  may be given a task requirements file to adhere to for the new task ideas. Use after picking seed repos (e.g. from
+  seed-repo-selection some csv would have been created) when asked to explore repos
   deeply, build a mental model, summarize a repo for task authoring, surface
   difficult task ideas, or set up a tasks/ folder with one summary per repo. Runs
   the exploration in parallel.
@@ -19,10 +18,10 @@ disable-model-invocation: true
 
 Take a set of already-selected seed **repositories** and produce, for each one, a
 dense `repo_summary.md` that a task author can use to build tasks that meet the task
-spec (PR/commit/issue-based, derivations, or net-new). The summary must include a
+requirements (net-new tasks only). The summary must include a
 real **mental model** of the repo: how it works end-to-end, its type/module
-hierarchy, and where **avg ~350-LoC (≈150–800), multi-file** fail2pass tasks
-naturally live.
+hierarchy, and its ability and complexity of repos where new tasks can be created
+which meet the task requirements.
 
 This skill is the step **after** `seed-repo-selection`. Selection picks
 the repos; this explores them.
@@ -34,6 +33,8 @@ the repos; this explores them.
   **5-6 concrete, file-cited "Difficult Task Ideas" (ranked hardest-first)** +
   "Risks/Gotchas". These 5-6 ideas are what the next skill (task-spec-creation)
   selects the top 3 hardest from — so make them genuinely hard and comparable.
+  But also make sure they're realistic, not some random difficult puzzles. It needs
+  to be fair and ground in realism that engineers would create and use.
 - Tailor everything to the task constraints (see below). Especially flag what is
   **offline-safe** vs needs network/display/GPU/live services — this gates whether
   a surface is usable for a containerized fail2pass task.
@@ -42,29 +43,24 @@ the repos; this explores them.
 
 ## Task constraints the exploration serves
 
-- **Avg ~350 LoC (≈150–800) gold patch across multiple files** → find surfaces with
+- **Avg gold patch LOC for potential new tasks across multiple files** → find surfaces with
   that natural change size (a subsystem, a feature spanning a few files, a
   multi-branch evaluator, a serializer path + its callers). Bigger and more
   cross-module than a one-liner, but a correct fix must still exist at that size.
-- **~10–20 NEW fail2pass tests (repo's existing suite = pass2pass)** → prefer code
+- **Potential to have > 5 NEW fail2pass tests (repo's existing suite = pass2pass)** → prefer code
   with dense, deterministic, fast **unit** tests that don't need
-  network/display/GPU/live services, so a comprehensive NEW F2P suite (10+ to resist
+  network/display/GPU/live services, so a comprehensive NEW F2P suite (5+ to resist
   reward hacking) is writable and the existing tests give a solid regression guard.
-- **<100 MB git image, no future commits/reflog/remote, offline Docker build** →
-  record SDK/runtime versions, what to pre-cache (NuGet/pip/npm/Maven), native
-  deps, submodules, and the smallest verify command.
-- **Feature implementation AND bug fixes** → identify both kinds of surfaces, and
-  note candidate **real recent PRs/commits/issues** (with the canonical fix) as
-  well as genuinely-missing gaps for net-new tasks (< 50% net-new overall).
 - **Category coverage** → tag each surface with its likely taxonomy category (e.g.
   Software Engineering, Debugging & Repair, Data Processing, Security, …) so the
   dataset can spread across categories.
 - **Difficulty (author toward Hard)** → the deliverable is **5-6 Difficult Task
-  Ideas ranked hardest-first**. Favor genuinely hard surfaces — large feature
-  additions, complex debugging, root-cause analysis, deep-domain/security — where
+  Ideas ranked hardest-first**. Favor genuinely realistic hard surfaces — large feature
+  additions, complex debugging, root-cause analysis, deep-domain/security, performance optimization
+  ML Engineering, data auditing, algorithm implementation, LLM pipelines, etc — where
   difficulty comes from reasoning complexity, cross-module understanding, subtle
   behavioral differences, or domain knowledge, NOT from vagueness, boilerplate, or
-  chaining unrelated changes. Give each idea a rough target (Hard ≤2/8 or
+  chaining multiple unrelated changes. Give each idea a rough target (Hard ≤2/8 or
   Medium ≤4/8) and a one-line "why it's hard" so the next skill can rank them.
 
 ## Workflow
@@ -109,7 +105,7 @@ what the repo is.
 Batch the launches (e.g. 5 at a time per language) so multiple Task calls go out in
 one message.
 
-### Step 5: write summaries (main agent)
+### Step 5: write high quality summaries (main agent)
 
 For each subagent result, write its markdown verbatim to
 `<tasks_dir>/<slug>/repo_summary.md`. Fix only the H1 title if needed.
@@ -122,8 +118,9 @@ cd "<tasks_dir>" && for d in */; do f="${d}repo_summary.md"; \
   || printf "%-22s MISSING\n" "${d%/}"; done
 ```
 
-A good summary is typically ~120-180 lines. Re-run a subagent for anything thin,
-missing the offline sections, or that does not list **5-6 ranked Difficult Task
+A good summary has enough details that captures all the important elements of the repo,
+like a good mental model of the moving parts, checking for all surfaces with great potential. 
+Re-run a subagent for anything thin, missing the offline sections, or that does not list **5-6 ranked Difficult Task
 Ideas**.
 
 ## The output: `repo_summary.md`
@@ -131,7 +128,7 @@ Ideas**.
 Every summary uses the fixed structure in
 [repo_summary_template.md](repo_summary_template.md). Non-negotiable sections:
 
-1. **Summary** — 3-5 dense sentences (what, language/build, module layout, test
+1. **Summary** — More than 5 dense sentences (what, language/build, module layout, test
    setup, offline notes).
 2. **Overview** — what it does, use cases, what it is NOT, version/target runtimes.
 3. **Language, Build & Tooling** — table + key build/test commands.
@@ -144,10 +141,10 @@ Every summary uses the fixed structure in
    display/GPU/live-service needs** (the offline gate).
 8. **Offline / Containerization Notes** — numbered: SDK/runtime version, restore/
    pre-cache, native deps, submodules, smallest verify command, base image.
-9. **Difficult Task Ideas** — **exactly 5-6 numbered items, ranked hardest-first**,
-   each citing real files + existing tests + an avg-~350-LoC (≈150–800) task idea, a
+9. **Difficult New Task Ideas** — **5-6 numbered items, ranked hardest-first**,
+   each citing real files + existing tests + potential for new tasks matching the required task requirements, a
    one-line **why it's hard** (reasoning/cross-module/subtle-behavior/domain) + a
-   rough **difficulty target** (Hard ≤2/8 or Medium ≤4/8), marked feature vs bug-fix,
+   rough **difficulty target** (Hard ≤2/8 or Medium ≤4/8), marked type of task idea,
    tagged with a likely taxonomy **category**, its **source type** (net-new / real
    PR-commit-issue), and offline-safe vs not.
 10. **Risks / Gotchas** — numbered pitfalls (huge build, native deps, flaky tests,
@@ -160,10 +157,10 @@ Every summary uses the fixed structure in
 - The mental model explains the **hierarchy/graph**: type hierarchy, module
   dependency, the request/data/render pipeline, or the parse→model→evaluate→
   serialize chain — whatever shape the repo has.
-- "Difficult Task Ideas" are **actionable and genuinely hard**: a task author could
+- "Difficult Task Ideas" are **actionable and genuinely hard that's realistic**: a task author could
   pick one and start. There are **5-6, ranked hardest-first**, each naming the
   implementation file(s), the test file(s) that would anchor fail2pass, the change
-  size (~350 LoC band), a one-line why-it's-hard + difficulty target, category,
+  size, gold patch expected LOC, a one-line why-it's-hard + difficulty target, category,
   source type, and whether it runs offline.
 - Offline notes are concrete enough to write a Dockerfile from (exact SDK version,
   what to pre-cache, smallest passing test command).

@@ -11,9 +11,10 @@ Thoroughness: very thorough.
 You are deeply exploring a cloned {LANGUAGE} repository to produce a comprehensive
 "mental model" summary that will be used later to design SWE-bench-style coding
 tasks (bug fixes / feature implementations — PR/commit/issue-based, derivations, or
-net-new — with **gold patches averaging ~350 LoC (≈150–800) across multiple
-files**, a **comprehensive fail2pass suite (~10–20 tests)**, and an
-**offline-buildable Docker image with a <100MB git source image**).
+net-new — with **multi-file gold patches**, a **comprehensive NEW fail2pass suite
+(5+ tests to resist reward hacking)**, and an **offline-buildable Docker image with
+a <100MB git source image**). You may be given a task spec that fixes the exact
+patch-size and test targets — adhere to it when it is provided.
 
 Repo location (already cloned, shallow): {ABSOLUTE_CLONE_PATH}
 Repo: {OWNER/REPO} ({1-2 line description of what it is}).
@@ -45,19 +46,23 @@ output template you were given (the section list is fixed). Requirements:
   referencing concrete files.
 - **Difficult Task Ideas**: **exactly 5-6 numbered items, RANKED hardest-first.**
   Author toward **Hard** — these are the candidates a later step ranks and turns
-  into task specs, so make them genuinely difficult and comparable. Each item must
-  cite the implementation file(s), the existing test file(s) that would anchor
-  fail2pass, a brief avg-~350-LoC (≈150–800) task idea, a **one-line "why it's
-  hard"** (reasoning complexity / cross-module understanding / subtle behavioral
-  differences / deep domain knowledge — NOT vagueness, boilerplate, or chaining
-  unrelated changes), a rough **difficulty target** (Hard ≤2/8 or Medium ≤4/8),
-  whether it's a **feature** or **bug-fix**, a likely taxonomy **category** (e.g.
+  into task specs, so make them genuinely difficult, **realistic, and fair** (the
+  kind of work engineers actually build and use — not contrived puzzles) and
+  comparable. Each item must cite the implementation file(s), the existing test
+  file(s) that would anchor fail2pass, a brief **multi-file** task idea (sized per
+  the task spec if you are given one), a **one-line "why it's hard"** (reasoning
+  complexity / cross-module understanding / subtle behavioral differences / deep
+  domain knowledge — NOT vagueness, boilerplate, or chaining unrelated changes), a
+  rough **difficulty target** (Hard ≤2/8 or Medium ≤4/8), the **type of task idea**
+  (e.g. feature, bug-fix, performance optimization, ML engineering, data auditing,
+  algorithm implementation, LLM pipeline), a likely taxonomy **category** (e.g.
   Software Engineering, Debugging & Repair, Data Processing, Security), a plausible
   **source type** (net-new gap, or a real recent PR/commit/issue you can point to),
   and whether it is **offline-safe** (no network/display/GPU/live service). Strongly
-  favor pure-logic, well-tested, offline surfaces.
+  favor genuinely hard, realistic, well-tested, offline surfaces.
 - **Testing** and **Offline / Containerization Notes** must be concrete enough to
   write a Dockerfile and a smallest passing test command from.
-- Keep it dense and useful for task authors (~120-180 lines is typical).
+- Keep it dense and useful for task authors — enough detail to capture all the
+  important moving parts of the repo and every surface with real task potential.
 
 Do NOT write files — you are read-only. Return the markdown as your final message.

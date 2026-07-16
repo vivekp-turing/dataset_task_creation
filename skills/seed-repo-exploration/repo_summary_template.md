@@ -6,7 +6,7 @@ keep headings verbatim. Tables/snippets are expected, not optional.
 ```markdown
 # {OWNER/REPO} - Repo Summary & Mental Model
 
-**Summary:** {3-5 dense sentences: what it is, language/build system, core module
+**Summary:** {5+ dense sentences: what it is, language/build system, core module
 layout, test setup, and the key build/offline notes.}
 
 ## Overview
@@ -59,12 +59,14 @@ service/Docker**. Distinguish unit vs integration explicitly.}
 
 ## Difficult Task Ideas
 {EXACTLY 5-6 numbered items, RANKED hardest-first (#1 = hardest). Each: implementation
-file(s) + existing test file(s) that anchor fail2pass + an avg-~350-LoC (≈150–800)
-task idea + a one-line **why it's hard** + a **difficulty target** (Hard ≤2/8 |
-Medium ≤4/8) + (feature | bug-fix) + taxonomy category + source type (net-new gap |
-real PR/commit/issue) + (offline-safe | needs X). Favor genuinely hard, pure-logic,
-well-tested, offline surfaces; difficulty must come from reasoning/cross-module/
-subtle-behavior/domain, not vagueness or chaining unrelated changes.}
+file(s) + existing test file(s) that anchor fail2pass + a brief **multi-file** task
+idea (sized per the task spec if one is given) + a one-line **why it's hard** + a
+**difficulty target** (Hard ≤2/8 | Medium ≤4/8) + **type of task idea** (feature |
+bug-fix | performance optimization | ML engineering | data auditing | algorithm
+implementation | LLM pipeline | …) + taxonomy category + source type (net-new gap |
+real PR/commit/issue) + (offline-safe | needs X). Favor genuinely hard, **realistic,
+fair** surfaces engineers actually build and use; difficulty must come from reasoning/
+cross-module/subtle-behavior/domain, not vagueness or chaining unrelated changes.}
 
 1. **{area}** — `path/impl`, `path/test`. {Task idea}. *Why hard:* {reasoning/
    cross-module/subtle behavior/domain}. Target: **Hard ≤2/8**. (feature, Software

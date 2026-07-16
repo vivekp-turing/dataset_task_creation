@@ -1,19 +1,26 @@
 #!/usr/bin/env python3
 """Select high-quality SEED REPOS (not tasks) from a Turing/SWE-Bench long-range
-metadata spreadsheet, filtered against the task requirements.
+metadata spreadsheet, filtered against the approved repo list (if provided) and
+the task requirements.
 
 The output is a list of distinct repositories (deduped, one row per repo) that are
 good candidates for authoring tasks (PR/commit/issue-based, derivations, or net-new;
 net-new < 50% overall). It selects REPOS, not a fixed list of tasks.
 
+If an approved-repo list is passed (e.g. docs/turing_approved_repos.txt, one
+`owner/repo` per line), it is applied as a HARD GATE before anything else: a repo
+that is not on the approved list is never selected.
+
 Usage examples:
   # 15 repos each for the top-4 task-spec language groups -> 60 total
   python select_seed_repos.py --xlsx "<sheet>.xlsx" --out seed_repos.csv \
-      --per-language 15 --languages "JS/TS,Python,Java,C#"
+      --per-language 15 --languages "JS/TS,Python,Java,C#" \
+      --approved-repos "docs/turing_approved_repos.txt"
 
   # Custom counts per language (overrides --per-language)
   python select_seed_repos.py --xlsx "<sheet>.xlsx" --out seed.csv \
-      --lang-counts "JS/TS=20,Python=15,Java=10,Go=5"
+      --lang-counts "JS/TS=20,Python=15,Java=10,Go=5" \
+      --approved-repos "docs/turing_approved_repos.txt"
 
 Language groups: a group name maps to one or more raw `language` values in the
 sheet. JS/TS expands to JavaScript+TypeScript by default. Any sheet language can
@@ -47,6 +54,49 @@ DEFAULT_GROUP_ALIASES = {
 }
 
 SENTINEL_LOC = 999999  # repo `loc` sentinel meaning unknown / very large
+
+
+def normalize_repo(value):
+    """Normalize a repo identifier to a lowercase `owner/repo` key.
+
+    Accepts `owner/repo`, a full GitHub URL, or a value with a trailing `.git`,
+    so the approved list and the sheet's `repo_full_name`/`repo` values match up.
+    """
+    if not value:
+        return None
+    s = str(value).strip().lower()
+    if not s:
+        return None
+    for prefix in ("https://github.com/", "http://github.com/", "git@github.com:",
+                   "github.com/"):
+        if s.startswith(prefix):
+            s = s[len(prefix):]
+            break
+    if s.endswith(".git"):
+        s = s[:-4]
+    return s.strip("/")
+
+
+def load_approved(path):
+    """Load the approved-repo list into a set of normalized `owner/repo` keys."""
+    approved = set()
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            key = normalize_repo(line)
+            if key:
+                approved.add(key)
+    if not approved:
+        sys.exit(f"Approved-repo list {path!r} is empty after parsing.")
+    return approved
+
+
+def is_approved(d, approved):
+    """True if a sheet row's repo is on the approved list (matched by full name)."""
+    for col in ("repo_full_name", "repo"):
+        key = normalize_repo(d.get(col))
+        if key and key in approved:
+            return True
+    return False
 
 
 def resolve_group(name):
@@ -98,8 +148,7 @@ def quality_ok(d, args):
         return False
     if lo is not None and lo > args.max_repo_loc:
         return False
-    if d.get("code_type_primary") not in {"feature", "bug-fix", "refactor"}:
-        return False
+    # code_type_primary is a soft suggestion (handled in score()), NOT a hard gate.
     return True
 
 
@@ -139,6 +188,10 @@ def main():
     ap.add_argument("--out", required=True, help="Output CSV path")
     ap.add_argument("--sheet", default=None,
                     help="Sheet name (auto-detected if omitted)")
+    ap.add_argument("--approved-repos", default=None,
+                    help="Path to the approved-repo list (one 'owner/repo' per "
+                         "line, e.g. docs/turing_approved_repos.txt). When given, "
+                         "it is a HARD GATE: only listed repos are selectable.")
     # Language coverage (high-level inputs)
     ap.add_argument("--languages", default="JS/TS,Python,Java,C#",
                     help="Comma-separated group names (used with --per-language)")
@@ -163,6 +216,19 @@ def main():
     args = ap.parse_args()
 
     sheet_name, data = load_rows(args.xlsx, args.sheet)
+
+    # Hard gate: restrict to the approved-repo list before any other filtering.
+    approved = None
+    if args.approved_repos:
+        approved = load_approved(args.approved_repos)
+        before = len(data)
+        data = [d for d in data if is_approved(d, approved)]
+        print(f"Approved-repo gate: {len(approved)} approved repos  |  "
+              f"{len(data)}/{before} sheet rows kept")
+        if not data:
+            sys.exit("No sheet rows are on the approved-repo list; check that the "
+                     "sheet's repo_full_name matches the list's owner/repo format.")
+
     lang_plan = parse_lang_counts(args)
 
     out_rows = []
