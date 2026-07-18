@@ -239,8 +239,11 @@ RUN <install deps>
 # Bake a pristine baseline so the verifier can restore test files + detect tamper.
 RUN cp -a /testbed /opt/baseline
 
+# --no-verify + hooksPath=/dev/null: repos that install husky/lefthook hooks during
+# the deps step (e.g. a gitleaks pre-commit) would otherwise abort this baseline commit.
 RUN git -C /testbed add -A \
-    && git -C /testbed -c user.email=t@t -c user.name=t commit -q -m baseline --allow-empty
+    && git -C /testbed -c core.hooksPath=/dev/null \
+       -c user.email=t@t -c user.name=t commit -q --no-verify -m baseline --allow-empty
 
 CMD ["bash"]
 ```
