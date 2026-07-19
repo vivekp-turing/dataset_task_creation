@@ -109,7 +109,9 @@ usually forces changes to the others.** Keep them consistent every time.
   diff → reset clone → re-embed inline in `tests/test.sh`). Then confirm the **existing
   golden still satisfies the new tests**; if a new assertion exposes a real gap the golden
   didn't cover, the **golden must be extended** to handle it (never weaken the test to fit
-  a thin golden). Bump `task.toml [metadata].num_f2p_tests`.
+  a thin golden). Bump `task.toml [metadata].num_f2p_tests` and add the new tests'
+  node IDs to `[metadata].fail_to_pass` (keep num_f2p_tests == len(fail_to_pass)); if
+  the regression subset changed, update `pass_to_pass` too.
 - **If scope grows** (D1 cross-module, D2 round-trip, E1 re-base, F1 adaptation): rebuild
   `solution/golden.patch` as **source-only** across the added files (keep it within the
   batch task-requirements file's LoC band — default avg ~350 LoC, ≈150–800; e.g. xAI
