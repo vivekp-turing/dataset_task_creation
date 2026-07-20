@@ -87,7 +87,15 @@ them). Nothing extra inside a task folder. Build/QA helpers (this skill's
    the toolchain locally, reason carefully from the real source that the new
    assertions fail pre-fix and pass post-fix. Prefer asserting against an
    already-correct oracle in the repo when one exists (rou3 compares interpreted vs
-   compiled output this way).
+   compiled output this way). **Record the graded test node IDs in `task.toml`
+   `[metadata]` (see template): `fail_to_pass` = every NEW test you embedded (its
+   length must equal `num_f2p_tests`); `pass_to_pass` = the existing regression
+   subset `test.sh` runs.** Write each ID in the test runner's own node-id format —
+   the exact string that runner prints/reports — so downstream eval reports can key
+   on them: pytest `pkg/test_mod.py::TestClass::test_case[param]`, vitest/jest
+   `src/x/foo.test.ts > describe block > it title`, `go test` `./pkg::TestName`,
+   cargo `module::tests::case`. Harbor still grades pass/fail from `test.sh`; these
+   lists are authoritative metadata for reporting/difficulty.
 3. **Pin the baseline SHA from the spec** in the Dockerfile (`REPO_SHA`) and in
    `task.toml` (`base_commit`). Use the real upstream repo URL. For pre-fix-parent
    tasks, use that parent SHA — the SHA where the deliverable is ABSENT.
@@ -103,8 +111,9 @@ them). Nothing extra inside a task folder. Build/QA helpers (this skill's
 6. **Working dir is `/testbed`** (SWE-Bench Harbor convention).
 7. **task.toml** carries the full `[metadata]` (see template): `repo`, `base_commit`,
    `source_type`, `difficulty` + `difficulty_explanation`, `category`, `subcategory`,
-   `objective_labels`, `artifact_labels`, `num_f2p_tests`, and `pass_at_k_*` (filled
-   after eval). No network at agent/verifier time; `cpus = 2`, `memory_mb = 4096`,
+   `objective_labels`, `artifact_labels`, `num_f2p_tests`, `fail_to_pass` +
+   `pass_to_pass` (the graded test node-id lists — see rule 2), and `pass_at_k_*`
+   (filled after eval). No network at agent/verifier time; `cpus = 2`, `memory_mb = 4096`,
    `storage_mb = 10240`, `gpus = 0`; verifier timeout 1800, agent 3600, build 1800.
 8. **`test.sh` and `solve.sh` executable** (`chmod +x`).
 9. **Keep image < 10GB, git dir small** — shallow fetch only (`--depth 1`), no
@@ -145,7 +154,8 @@ them). Nothing extra inside a task folder. Build/QA helpers (this skill's
       TESTS in clone → diff → reset clone, then embed inline in tests/test.sh. (No new
       pass2pass — pick the existing tests/subset to run for regression.)
 - [ ] Write the 7 files (mirror the reference task; adapt toolchain); fill task.toml
-      [metadata] taxonomy from the spec
+      [metadata] taxonomy from the spec, incl. fail_to_pass / pass_to_pass node IDs
+      in the runner's own format (fail_to_pass length == num_f2p_tests)
 - [ ] chmod +x solution/solve.sh tests/test.sh
 - [ ] Verify (scripts/verify.sh <S>): golden + embedded test patch apply @ base SHA;
       source/test separation; clone clean; instruction non-leak
@@ -206,7 +216,20 @@ category               = "<e.g. Software Engineering>"
 subcategory            = "<e.g. Feature implementation>"
 objective_labels       = ["Implement"]          # multi-label
 artifact_labels        = ["Codebase"]           # multi-label
-num_f2p_tests          = 0                       # set to the real count (target 10–20)
+num_f2p_tests          = 0                       # real count; must equal len(fail_to_pass)
+
+# Graded test node IDs in the runner's OWN format (the exact string it reports), so
+# eval reports can key on them. fail_to_pass = the NEW tests embedded in tests/test.sh;
+# pass_to_pass = the existing regression subset test.sh runs. Harbor still grades via
+# test.sh — these are authoritative metadata. Formats: pytest
+# "pkg/test_mod.py::TestClass::test_case", vitest/jest
+# "src/x/foo.test.ts > describe > it title", go "./pkg::TestName", cargo "mod::tests::case".
+fail_to_pass = [
+  # "…",  # one entry per NEW F2P test (count == num_f2p_tests)
+]
+pass_to_pass = [
+  # "…",  # the existing tests the run command exercises as the regression guard
+]
 # TODO(pre-submission): fill measured pass@8 after eval
 # pass_at_k_gpt_5_5    = "x/8"
 # pass_at_k_opus_4_8   = "x/8"
@@ -347,6 +370,8 @@ bash scripts/verify.sh $(ls -1 <root>/harbor_tasks | grep -v '^_')
 
 Repo URL + base SHA (+ source_type); category/subcategory + difficulty;
 module/toolchain + base image; source files changed + LoC (avg ~350); count of NEW
-fail2pass cases (target 10–20) + the existing tests used as pass2pass; the three
-apply-checks pass against the base SHA; clone clean; the offline run command; and a
-one-line fail2pass rationale (why the new tests fail pre-fix and pass post-fix).
+fail2pass cases (target 10–20) + the existing tests used as pass2pass; the
+`fail_to_pass` / `pass_to_pass` node-id lists recorded in task.toml (fail_to_pass
+count == num_f2p_tests); the three apply-checks pass against the base SHA; clone
+clean; the offline run command; and a one-line fail2pass rationale (why the new
+tests fail pre-fix and pass post-fix).

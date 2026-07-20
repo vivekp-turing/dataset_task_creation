@@ -43,6 +43,18 @@ verify(){ s=$1; echo "===== $s ====="
     echo "TEST skip (no embedded patch)"; echo "BOTH skip"
   fi
   grep -E "^\+\+\+ b/.*([Tt]est|spec|__tests__)" "$T/solution/golden.patch" >/dev/null && echo "WARN: gold may touch tests" || echo "gold=source-only ok"
+  # task.toml must carry the graded F2P node IDs (persisted downstream as
+  # RelevantPR.fail_to_pass); count quoted entries in the array, skipping comments,
+  # and sanity-check against num_f2p_tests.
+  F2P_N=$(awk '/^fail_to_pass *= *\[/{f=1;next} f&&/^[[:space:]]*\]/{f=0} f&&/^[[:space:]]*#/{next} f&&/"/{c++} END{print c+0}' "$T/task.toml" 2>/dev/null)
+  NUM_F2P=$(grep -E '^num_f2p_tests' "$T/task.toml" 2>/dev/null | head -1 | sed -E 's/^[^=]*=[[:space:]]*([0-9]+).*/\1/')
+  if [ "${F2P_N:-0}" -eq 0 ]; then
+    echo "  WARN: task.toml fail_to_pass is empty — emit the graded F2P node IDs"
+  elif [ -n "$NUM_F2P" ] && [ "$F2P_N" -ne "$NUM_F2P" ]; then
+    echo "  WARN: fail_to_pass count ($F2P_N) != num_f2p_tests ($NUM_F2P)"
+  else
+    echo "fail_to_pass: $F2P_N ids ok"
+  fi
   rm -f "$TP"
   [ -n "$TMPWT" ] && { git -C "$C" worktree remove --force "$TMPWT" >/dev/null 2>&1; rm -rf "$TMPWT"; }
   c=$(git -C "$C" status --porcelain 2>/dev/null | wc -l | tr -d ' '); echo "clone dirty lines: $c"

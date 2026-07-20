@@ -132,7 +132,10 @@ requirement guardrails. Key discipline:
   — and if the golden's scope changes, the tests follow, and vice-versa. Fixing
   `test_false_positives`/`test_false_negatives`/`test_clarity` rebuilds the embedded F2P
   patch in `tests/test.sh`; if a new fair assertion exposes a gap, extend the **golden** to
-  satisfy it (never weaken a test to fit a thin golden).
+  satisfy it (never weaken a test to fit a thin golden). Whenever the F2P set changes,
+  keep `task.toml [metadata].fail_to_pass` (and `num_f2p_tests == len(fail_to_pass)`) in
+  sync — add/rename/remove node IDs to match the rebuilt tests; update `pass_to_pass` if
+  the regression subset changed.
 - **Validate locally before re-running QC** (cheaper than a QC run): apply
   `solution/golden.patch` → verifier passes; confirm the F2P fail on baseline; run
   `../task_spec_to_harbor_task/scripts/verify.sh <slug>` (source-only golden, patches apply
