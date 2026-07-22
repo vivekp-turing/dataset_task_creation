@@ -10,7 +10,7 @@ description: >-
   the category/subcategory + objective/artifact labels + source_type + difficulty.
   Use when asked to build/create a Harbor task (or batch of tasks) from task specs, to
   author the golden solution + verifier tests, or to verify that such Harbor tasks
-  apply cleanly and are non-leaking. These are net new category of tasks, so these are 
+  apply cleanly and are non-leaking. These are net new category of tasks, so these are
   brand new tasks for which task specs have been created. So the harbor format task is brand new.
   A task requirements file will be optionally provided to give the requirements of these net
   new tasks, make sure those requirements are strictly adhered to when creating the harbor
@@ -69,7 +69,7 @@ them). Nothing extra inside a task folder. Build/QA helpers (this skill's
 
 ## Hard rules (non-negotiable)
 
-1. **Two cleanly-separated patches.** The golden = source files ONLY 
+1. **Two cleanly-separated patches.** The golden = source files ONLY
    saved as `solution/golden.patch`. The test patch = test files ONLY,
    **embedded inline in `tests/test.sh`**. Build each by editing the clone, then
    `git -C clones/<S> --no-pager diff -- <paths>`, then
@@ -123,21 +123,21 @@ them). Nothing extra inside a task folder. Build/QA helpers (this skill's
 
 - **Task statement/description clarity.** Task description must be clear, not too vague. Slightly underspecified
   is fine, but not too much underspecified. It shouldn't be over specified telling the agent what it should do.
-  Task description/instruction should stick to just a task, like a formal task spec, without "you" or anything of 
+  Task description/instruction should stick to just a task, like a formal task spec, without "you" or anything of
   that sort. Anything that can be inferred from the repo can be avoided in the task instruction. It must be fair,
   so while it's really difficult, make sure it's a fair task. Don't chain multiple requirements to make it difficult.
 - **Test to task instruction alignment.** Make sure the tests (f2p tests) have high coverage that cover the task requirements
   really well. Make sure it's aligned with the task instruction and doesn't deviate too much. It's okay to lean on slightly strict
   tests, but don't make them unfair. Make sure tests don't have false positives or false negatives. Ensure it's not pinned to a
-  very specific implementation, but slightly generic enough to verify multiple implementations. Make sure tests have clarity and 
+  very specific implementation, but slightly generic enough to verify multiple implementations. Make sure tests have clarity and
   don't cover things that cannot be inferred or derived from the task instruction or the repos. Don't under specify the tests as well,
   make sure they are comprehensive to prevent reward hacking.
 - **Gold path clarity and alignment.** Make sure the golden patch is aligned well with the task instruction, and actually solves the task
-  and pass all the tests. Make sure the golden patch follows whatever requirements have been provided if they have been provided. 
+  and pass all the tests. Make sure the golden patch follows whatever requirements have been provided if they have been provided.
   Usually tasks are selected such that golden patch will have certain minimum number of lines of code (LOC) and/or also have
   minimum number of non test files edited to make the tasks difficult and long horizon. Ensure it's adhered to. Ensure the golden pathc
   is clear.
-- **Task instruction/description realism and difficulty.** The task should be realistic, something that real 
+- **Task instruction/description realism and difficulty.** The task should be realistic, something that real
   engineers would solve, not some random difficult puzzles. It must be really difficult for leading frontier models, and
   they are really good. Make sure it's high quality SWE and research based tasks.
 
@@ -184,8 +184,6 @@ keywords    = ["code", "swe", "<lang>", "<area>"]
 metadata    = { vendor = "Turing" }
 
 [environment]
-# TODO(pre-submission): pin the digest after `docker push` (…@sha256:<digest>)
-docker_image      = "<registry>/<path>/<owner>__<repo>-<slug>:latest"
 os                = "linux"
 cpus              = 2
 memory_mb         = 4096
