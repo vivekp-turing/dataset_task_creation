@@ -2,7 +2,8 @@
 
 Tag a SWE-Bench-style / Harbor-format task with a **category**, **subcategory**, and
 **primary language**, using an LLM (Anthropic Claude) as a judge. The taxonomy is the
-one from the Reflection task-requirements spec (the "Distribution requirements" section).
+one from the batch task-requirements / `skills/task-spec-creation/task_taxonomy.md`
+(the "Distribution requirements" section).
 
 ## What it does
 

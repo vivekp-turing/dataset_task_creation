@@ -1,6 +1,6 @@
 # SWE Task Generation
 
-This repo holds the skills, source data, and QC tooling used to turn **Reflection-approved
+This repo holds the skills, source data, and QC tooling used to turn **approved
 seed repositories** into **hard, original SWE agent tasks** in Harbor (SWE-Bench-style)
 format. It captures the end-to-end pipeline: pick an approved repo, build a deep mental
 model of it, ideate a ranked set of hard task surfaces, write specs for the top 3, build
@@ -17,9 +17,10 @@ repo's existing suite as the `pass2pass` regression guard, and a `<100 MB` git i
 an offline Docker build.
 
 > The LoC band, F2P count, net-new cap, and difficulty gate come from the **batch
-> task-requirements file** for the current batch (e.g. `docs/<client>_task_requirements.md`);
-> the numbers here are **defaults** used when none is supplied. A hard floor of **> 5 F2P
-> tests** always applies regardless of the batch.
+> task-requirements file** for the current batch (e.g.
+> `docs/<batch>_task_requirements/<batch>_task_requirements.md`); the numbers here are
+> **defaults** used when none is supplied. A hard floor of **> 5 F2P tests** always
+> applies regardless of the batch.
 
 **Difficulty target (per the batch task-requirements file; default): ~50% Medium / ~50%
 Hard**, measured as **pass@8** in the models' native harnesses:
@@ -29,17 +30,15 @@ Hard**, measured as **pass@8** in the models' native harnesses:
 
 ## Two strict inputs (do not deviate)
 
-1. **Repos:** author tasks **only** from the **Turing-approved subset** of the custom
-   repositories list. The approved list is `docs/turing_approved_repos.txt` (the
-   sign-off applied to `docs/[External] Turing __ ReflectionAi - Swebench custom -
-   Repositories list.xlsx`). This is a **hard gate** — a repo that is not on
-   `turing_approved_repos.txt` must not be used, no exceptions.
-2. **Task requirements:** every task must satisfy the **provided task requirements
-   file** (currently `docs/updated_reflection_reqs_9_july.pdf`, `.docx` mirror
-   alongside it). All difficulty bands, gold-patch LoC / non-test-file minimums, the
-   F2P floor, taxonomy/labels, distribution targets, submission format, and quality
-   rules come from that file — swap in a different requirements file and the tasks
-   adhere to it instead.
+1. **Repos:** author tasks **only** from the **approved** repository list. The approved
+   list is `docs/turing_approved_repos.txt` (one `owner/repo` per line). This is a
+   **hard gate** — a repo that is not on that list must not be used, no exceptions.
+2. **Task requirements:** every task must satisfy the **batch task-requirements file**
+   for the current batch under `docs/<batch>_task_requirements/` (e.g.
+   `docs/msft_task_requirements/msft_task_requirements.md`). All difficulty bands,
+   gold-patch LoC / non-test-file minimums, the F2P floor, taxonomy/labels,
+   distribution targets, submission format, and quality rules come from that file —
+   swap in a different requirements file and the tasks adhere to it instead.
 
 ---
 
@@ -74,8 +73,8 @@ claude
 
 > Use the skills in `skills/` to run the SWE task-generation pipeline. Start at Phase 1
 > (`seed-repo-selection`), using **only** repos from `docs/turing_approved_repos.txt`
-> and the requirements in `docs/updated_reflection_reqs_9_july.pdf`, then continue
-> through exploration → spec → Harbor build.
+> and the requirements in `docs/<batch>_task_requirements/`, then continue through
+> exploration → spec → Harbor build.
 
 Claude will invoke `seed-repo-selection` → `seed-repo-exploration` → `task-spec-creation`
 → `task_spec_to_harbor_task` in order. The difficulty filter (Phase 5), Auto QC
@@ -89,7 +88,7 @@ tooling/harnesses described below.
 ```mermaid
 %%{init: {"flowchart": {"curve": "basis", "nodeSpacing": 50, "rankSpacing": 55}}}%%
 flowchart TB
-    A[Turing-approved<br/>repos]
+    A[Approved<br/>seed repos]
     P1[Phase 1<br/>Select seed repos]
     P2[Phase 2<br/>Explore repos]
     D[5-6 ranked<br/>task ideas / repo]
@@ -129,9 +128,9 @@ tasks go to **human review** and then **packaging**.
 
 ### Phase 1 — Select seed repos  ·  skill: [`seed-repo-selection`](skills/seed-repo-selection/)
 
-Author *original* tasks **only** from Turing-approved repos. Start from the metadata
-sheet (`docs/Turing SWEBench Public Dataset (Long-Range Tasks only, n=2551).xlsx`) for
-per-repo signals, but **restrict the candidate set to `docs/turing_approved_repos.txt`** —
+Author *original* tasks **only** from approved repos. Start from a per-repo metadata
+spreadsheet (pass via `--xlsx`; the repo ships `docs/swebench_repos_list.xlsx` as a
+catalog), but **restrict the candidate set to `docs/turing_approved_repos.txt`** —
 never select a repo that is not on that list.
 
 > **Optional task requirements.** Phase 1 (and Phase 2) can also be handed a *task
@@ -145,18 +144,20 @@ never select a repo that is not on that list.
 > produced in Phase 2.
 
 The skill (`skills/seed-repo-selection/scripts/select_seed_repos.py`) filters and ranks
-against `updated_reflection_reqs_9_july` and writes a deduped CSV (one row per repo):
+against the batch requirements and writes a deduped CSV (one row per repo):
 
-- **Metadata used:** per-task patch size (`instance_loc`), total repo size (`loc`),
-  `language`, `difficulty_score`, `code_type_primary` (feature / bug-fix / refactor),
-  `f2p_count` / `p2p_count`, `stars`.
+- **Metadata used (when present on the sheet):** per-task patch size (`instance_loc`),
+  total repo size (`loc`), `language`, `difficulty_score`, `code_type_primary`
+  (feature / bug-fix / refactor), `f2p_count` / `p2p_count`, `stars`. Simpler catalog
+  sheets (e.g. `docs/swebench_repos_list.xlsx`) still supply language/stars/age signals —
+  see the skill for expected columns.
 - **Approved-repo gate (hard):** `--approved-repos docs/turing_approved_repos.txt` is
   applied **before anything else** — a repo that is not on the approved list is never
   selectable (drop the flag only if no approved list exists yet).
 - **Quality gate** (all tunable): `instance_loc` in the target band (default ~350-LoC,
-  ≈150–800; set per the task spec), `f2p_count >= 5` (a signal the repo has dense tests),
-  `stars >= 250` (≥40% of tasks must come from >1k-star repos), and sane repo size (drops
-  the unknown/huge sentinel to keep the image `<100 MB`).
+  ≈150–800; set per the task requirements), `f2p_count >= 5` (a signal the repo has dense
+  tests), `stars >= 250` (≥40% of tasks must come from >1k-star repos), and sane repo size
+  (drops the unknown/huge sentinel to keep the image `<100 MB`).
 - **Ranking signals (soft):** closeness to the `instance_loc` sweet spot, higher
   `difficulty_score`, capped popularity, and test coverage. `code_type_primary`
   (feature / bug-fix / refactor) is only a *suggestion* here — a bug-fix scoring bonus,
@@ -180,11 +181,11 @@ task-authoring intelligence, not docs:
 - **"Difficult Task Ideas"** — **5–6 file-cited ideas, ranked hardest-first**, that are
   genuinely hard *and* realistic/fair (work engineers actually build and use — not
   contrived puzzles). Each names the implementation file(s) + the test file(s) that would
-  anchor fail2pass, a **multi-file** change sketch (sized per the task spec), a one-line
-  **why it's hard** + a rough **difficulty target** (Hard ≤2/8 or Medium ≤4/8), the
-  **type of task idea** (feature, bug-fix, performance optimization, ML engineering, data
-  auditing, algorithm implementation, LLM pipeline, …), a likely taxonomy **category** +
-  **source type**, and offline-safe vs not.
+  anchor fail2pass, a **multi-file** change sketch (sized per the task requirements), a
+  one-line **why it's hard** + a rough **difficulty target** (Hard ≤2/8 or Medium ≤4/8),
+  the **type of task idea** (feature, bug-fix, performance optimization, ML engineering,
+  data auditing, algorithm implementation, LLM pipeline, …), a likely taxonomy
+  **category** + **source type**, and offline-safe vs not.
 
 This is the **exploration ⇄ initial task ideas** loop: the ranked "Difficult Task Ideas"
 section *is* the candidate pool that Phase 3 selects the top 3 hardest from, so thin
@@ -228,12 +229,13 @@ shape.
 
 Implement **each** `task_spec_N.md` as its own complete, runnable Harbor task (point the
 skill at each spec separately). The instruction must **not** leak the verifier. Layout
-(matching the Reflection submission format):
+(Harbor / SWE-Bench-style submission format):
 
 - `instruction.md` — behavior-focused, slightly underspecified problem statement;
-- `task.toml` — config + full `[metadata]` (repo, base_commit, `source_type`,
+- `task.toml` — config + full `[metadata]` (`repo`, `base_commit`, `source_type`,
   difficulty + explanation, category/subcategory, objective/artifact labels,
-  `num_f2p_tests`, and `pass_at_k_*` filled after eval);
+  `num_f2p_tests`, `fail_to_pass` + `pass_to_pass` node-id lists, and `pass_at_k_*`
+  filled after eval);
 - `environment/` — `Dockerfile` (pins the base SHA, installs deps at build time, bakes a
   pristine `/opt/baseline`) + `problem_statement.md`;
 - `solution/` — `golden.patch` (source-only, multi-file, sized to the task
@@ -385,18 +387,19 @@ evidence — a diagnosis skill and a "hardness doctor" implementation skill:
 | `skills/seed-repo-exploration/` | Phase 2 — deep-explore each repo into a `repo_summary.md` with 5–6 ranked difficult task ideas. |
 | `skills/task-spec-creation/` | Phase 3 — select the top 3 hardest ideas per repo and write `task_spec_{1,2,3}.md`. |
 | `skills/task_spec_to_harbor_task/` | Phase 4 — build one complete Harbor task from each `task_spec_N.md` + repo clone. |
-| `skills/auto-qc/` | Phase 6 — accept/reject gate combining ARIA 8-rubric quality + cheap-model difficulty pre-filter. |
+| `skills/auto-qc/` | Phase 6 — accept/reject gate combining ARIA 9-rubric quality + cheap-model difficulty pre-filter. |
 | `skills/auto_quality_fix/` | Phase 6 fix loop — triage fixability, then repair rejected rubrics (requirement-preserving) and re-run Auto-QC until accepted, capped at 3 iterations. |
 | `skills/identify_hardening_levers/` | Phase 5 hardening loop (diagnose) — find *why* a cheap-model-solvable task is too easy and write the ROI-ranked `hardness_levers.md` prescription. |
 | `skills/implement_hardening_levers/` | Hardening loop (treat) — dose the smallest top-ROI lever subset from `hardness_levers.md`, cascade edits across instruction/tests/golden, and re-eval. |
 | `skills/eval-trajectory-failure-analysis/` | Trajectory + failure-mode post-mortem of harbor eval trials; used by the hardening loop to diagnose *why* a task was easy. |
 | `scripts/auto_qc/auto_qc.py` | Phase 6 orchestrator the `auto-qc` skill drives (runs ARIA per task + folds in the pre-filter). |
 | `scripts/auto_qc/ARIA-FOR-HARBOR/` | Vendored ARIA-for-Harbor annotation pipeline the orchestrator calls. |
+| `scripts/auto_qc/README.md` | Auto-QC setup, flags, inputs/outputs. |
 | `scripts/tag_task.py` | Category/subcategory/language tagging for a task (LLM judge over the taxonomy). |
+| `scripts/README.md` | Docs for `tag_task.py`. |
 | `docs/turing_approved_repos.txt` | **The approved repo gate** — only these repos may be used. |
-| `docs/updated_reflection_reqs_9_july.pdf` / `.docx` | **The task requirements** — single source of truth. |
-| `docs/Turing SWEBench Public Dataset (Long-Range Tasks only, n=2551).xlsx` | Per-repo metadata signals read by Phase 1. |
-| `docs/[External] Turing __ ReflectionAi - Swebench custom - Repositories list.xlsx` | The custom repositories list the approved subset is drawn from. |
+| `docs/swebench_repos_list.xlsx` | Per-repo catalog metadata (language, stars, age, …) usable by Phase 1. |
+| `docs/<batch>_task_requirements/` | **Batch task requirements** — single source of truth per batch (e.g. `docs/msft_task_requirements/msft_task_requirements.md`). |
 
 Each skill is a self-contained folder with a `SKILL.md` (plus templates/briefs/scripts).
 Run them in order — **selection → exploration → spec creation → Harbor build** — then
